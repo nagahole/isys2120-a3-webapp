@@ -31,24 +31,55 @@
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav">
       {% if session.logged_in %}
-      <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown"
-          aria-haspopup="true" aria-expanded="false">
-          View/Manage Users
-        </a>
-        <div class="dropdown-menu" aria-labelledby="navbarDropdown">
+        <li class="nav-item dropdown">
 
+          <!-- Scaffold View/Manage Users -->
 
-          <a class="dropdown-item" href="{{ url_for('list_users') }}">List users</a>
-          <a class="dropdown-item" href="{{ url_for('search_users_byname') }}">User search</a>
+          <a
+            class="nav-link dropdown-toggle" href="#" id="navbarDropdownUsers"
+            role="button" data-toggle="dropdown"
+            aria-haspopup="true" aria-expanded="false"
+          >
+            View/Manage Users
+          </a>
+
+          <div class="dropdown-menu" aria-labelledby="navbarDropdownUsers">
+
+            <a class="dropdown-item" href="{{ url_for('list_users') }}">List users</a>
+            <a class="dropdown-item" href="{{ url_for('search_users_byname') }}">User search</a>
             {% if session['isadmin'] == True %}
               <a class="dropdown-item" href="{{ url_for('add_user') }}">Add user</a>
             {% endif %}
-          <a class="dropdown-item" href="{{ url_for('list_user_stats') }}">User stats</a>
-          <div class="dropdown-divider"></div>
-          <a class="dropdown-item" href="{{ url_for('list_consolidated_users') }}">User Details (Advanced)</a>
-        </div>
-      </li>
+            <a class="dropdown-item" href="{{ url_for('list_user_stats') }}">User stats</a>
+
+            <div class="dropdown-divider"></div>
+
+            <a class="dropdown-item" href="{{ url_for('list_consolidated_users') }}">User Details (Advanced)</a>
+
+          </div>
+        </li>
+
+        <!-- Extended Tickets Dropdown -->
+
+        <li class="nav-item dropdown">
+          <a
+            class="nav-link dropdown-toggle" href="#" id="navbarDropdownTickets"
+            role="button" data-toggle="dropdown"
+            aria-haspopup="true" aria-expanded="false"
+          >
+            View/Manage Tickets
+          </a>
+
+          <div class="dropdown-menu" aria-labelledby="navbarDropdownTickets">
+
+            <a class="dropdown-item" href="{{ url_for('list_tickets') }}">List tickets</a>
+            <!-- vvv implement remove and update ticket here too vvv -->
+            <a class="dropdown-item" href="{{ url_for('search_tickets_byid') }}">Ticket search</a>
+            <a class="dropdown-item" href="{{ url_for('add_ticket') }}">Add ticket</a>
+            <a class="dropdown-item" href="{{ url_for('ticket_summary') }}">Ticket summary</a>
+          </div>
+        </li>
+
       {% endif %}
 
       <li class="nav-item">
@@ -58,10 +89,10 @@
     </div>
   </nav>
   <!--
-            This is for our flashed messages
-            Whenever we use flash('message in here')
-            it will come out inside this list
-        -->
+      This is for our flashed messages
+      Whenever we use flash('message in here')
+      it will come out inside this list
+  -->
   {% with messages = get_flashed_messages() %}
   {% if messages %}
   <ul class="flashes">

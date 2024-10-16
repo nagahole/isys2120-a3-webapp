@@ -1,54 +1,57 @@
 #!/usr/bin/env python3
-# Imports
+
 import pg8000
 import configparser
 import sys
+import traceback
 
-#  Common Functions
-##     database_connect()
-##     dictfetchall(cursor,sqltext,params)
-##     dictfetchone(cursor,sqltext,params)
-##     print_sql_string(inputstring, params)
+from typing import Optional
+
+SqlEntry = dict[str, any]
+SqlResult = list[SqlEntry]
+
+"""
+Common Functions
+
+ - database_connect()
+ - dictfetchall(cursor,sql,params)
+ - dictfetchone(cursor,sql,params)
+ - print_sql_string(inputstring, params)
+
+"""
 
 
-################################################################################
-# Connect to the database
-#   - This function reads the config file and tries to connect
-#   - This is the main "connection" function used to set up our connection
-################################################################################
+def database_connect() -> Optional[pg8000.Connection]:
+    """
+    Reads config file and attempts to connect to database
 
-def database_connect():
-    # Read the config file
+    Primary db connection method for the program
+    """
+
+    # reads the config file
     config = configparser.ConfigParser()
     config.read('config.ini')
 
-    # Create a connection to the database
+    # creates a connection to the database
     connection = None
 
-    # choose a connection target, you can use the default or
-    # use a different set of credentials that are setup for localhost or winhost
-    connectiontarget = 'DATABASE'
+    # choose a connection target, you can use the default or use a
+    # different set of credentials that are set up for localhost or winhost
+    connection_target = 'DATABASE'
+
+    if "database" in config[connection_target]:
+        targetdb = config[connection_target]["database"]
+    else:
+        targetdb = config[connection_target]["user"]
+        
     try:
-        '''
-        This is doing a couple of things in the back
-        what it is doing is:
-
-        connect(database='y2?i2120_unikey',
-            host='awsprddbs4836.shared.sydney.edu.au,
-            password='password_from_config',
-            user='y2?i2120_unikey')
-        '''
-        targetdb = ""
-        if ('database' in config[connectiontarget]):
-            targetdb = config[connectiontarget]['database']
-        else:
-            targetdb = config[connectiontarget]['user']
-
-        connection = pg8000.connect(database=targetdb,
-                                    user=config[connectiontarget]['user'],
-                                    password=config[connectiontarget]['password'],
-                                    host=config[connectiontarget]['host'],
-                                    port=int(config[connectiontarget]['port']))
+        connection = pg8000.connect(
+            database=targetdb,
+            host=config[connection_target]["host"],
+            user=config[connection_target]["user"],
+            password=config[connection_target]["password"],
+            port=int(config[connection_target]["port"])
+        )
         connection.run("SET SCHEMA 'airline';")
     except pg8000.OperationalError as e:
         print("""Error, you haven't updated your config.ini or you have a bad
@@ -57,7 +60,7 @@ def database_connect():
         """)
         print(e)
     except pg8000.ProgrammingError as e:
-        print("""Error, config file incorrect: check your password and username""")
+        print("Error, config file incorrect: check your password and username")
         print(e)
     except Exception as e:
         print(e)
@@ -65,445 +68,462 @@ def database_connect():
     # Return the connection to use
     return connection
 
-######################################
-# Database Helper Functions
-######################################
-def dictfetchall(cursor,sqltext,params=[]):
-    """ Returns query results as list of dictionaries."""
-    """ Useful for read queries that return 1 or more rows"""
+
+###############################################################################
+# DATABASE HELPER FUNCTIONS                                                   #
+###############################################################################
+
+def dict_fetch_all(cursor: pg8000.Cursor, sql: str,
+                   params=()) -> Optional[SqlResult]:
+    """
+    Returns query results as list of dictionaries
+
+    Useful for read queries that return 1 or more rows
+    """
+
+    cursor.execute(sql, params)
+
+    if cursor.description is None:
+        return None
 
     result = []
+
+    cols = [a[0] for a in cursor.description]
+
+    rows = cursor.fetchall()
+
+    if rows is not None:
+        for row in rows:
+            result.append({a: b for a, b in zip(cols, row)})
+
+    print("returning result: ", result)
+    return result
+
+
+def dict_fetch_one(cursor: pg8000.Cursor,
+                   sql: str, params=()) -> SqlResult:
+    """
+    Returns query results as list of dictionaries.
     
-    cursor.execute(sqltext,params)
+    Useful for create, update and delete queries that 
+    only need to return one row
+    """
+
+    result = []
+    cursor.execute(sql, params)
+    
     if cursor.description is not None:
-        cols = [a[0] for a in cursor.description]
         
-        returnres = cursor.fetchall()
-        if returnres is not None or len(returnres > 0):
-            for row in returnres:
-                result.append({a:b for a,b in zip(cols, row)})
-
-    print("returning result: ",result)
-    return result
-
-def dictfetchone(cursor,sqltext,params=None):
-    """ Returns query results as list of dictionaries."""
-    """ Useful for create, update and delete queries that only need to return one row"""
-
-    result = []
-    cursor.execute(sqltext,params)
-    if (cursor.description is not None):
         print("cursor description", cursor.description)
+
         cols = [a[0] for a in cursor.description]
-        returnres = cursor.fetchone()
-        print("returnres: ", returnres)
-        if (returnres is not None):
-            result.append({a:b for a,b in zip(cols, returnres)})
+        sql_result = cursor.fetchone()
+
+        print("sql_result: ", sql_result)
+
+        if sql_result is not None:
+            result.append({a: b for a, b in zip(cols, sql_result)})
+
     return result
 
-##################################################
-# Print a SQL string to see how it would insert  #
-##################################################
 
-def print_sql_string(inputstring, params=None):
+def print_sql_string(sql: str, params=None) -> None:
     """
-    Prints out a string as a SQL string parameterized assuming all strings
+    Prints out a string as a SQL string parameterized
+
+    Assumes params are all strings
+
+    Useful for checking how it would insert
     """
-    if params is not None:
-        if params != []:
-           inputstring = inputstring.replace("%s","'%s'")
-    
-    print(inputstring % params)
 
-###############
-# Login       #
-###############
+    print(sql.replace("%s", "'%s'") % params)
 
-def check_login(username, password):
-    '''
+
+def check_login(username: str, password: str) -> Optional[SqlResult]:
+    """
     Check Login given a username and password
-    '''
-    # Ask for the database connection, and get the cursor set up
-    conn = database_connect()
+    """
+
     print("checking login")
 
-    if(conn is None):
+    conn = database_connect()
+
+    if conn is None:
         return None
-    cur = conn.cursor()
+
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT *     
+            FROM Users
+            JOIN UserRoles ON (Users.userroleid = UserRoles.userroleid)
+            WHERE userid=%s AND password=%s
+    """
+
+    print_sql_string(sql, (username, password))
+
+    sql_res = None
+
     try:
-        # Try executing the SQL and get from the database
-        
-        sql = """SELECT *
-                FROM Users
-                    JOIN UserRoles ON
-                        (Users.userroleid = UserRoles.userroleid)
-                WHERE userid=%s AND password=%s"""
-        print_sql_string(sql, (username, password))
-        r = dictfetchone(cur, sql, (username, password)) # Fetch the first row
-        cur.close()                     # Close the cursor
-        conn.close()                    # Close the connection to the db
-        return r
-    except:
-        # If there were any errors, return a NULL row printing an error to the debug
-        import traceback
+        sql_res = dict_fetch_one(cursor, sql, (username, password))
+    except Exception as e:
         traceback.print_exc()
-        print("Error Invalid Login")
-    cur.close()                     # Close the cursor
-    conn.close()                    # Close the connection to the db
-    return None
-    
-########################
-#List All Items#
-########################
+        print(f"Error Invalid Login - {e}")
 
-# Get all the rows of users and return them as a dict
-def list_users():
-    # Get the database connection and set up the cursor
+    cursor.close()
+    conn.close()
+    return sql_res
+    
+
+def list_users() -> Optional[SqlResult]:
+    """
+    Lists all users
+
+    Gets all the rows of Users table and returns them as a dict
+    """
+
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+
+    if conn is None:
         return None
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    returndict = None
+
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT *
+            FROM users
+    """
+
+    users_dict = None
 
     try:
-        # Set-up our SQL query
-        sql = """SELECT *
-                    FROM users """
-        
-        # Retrieve all the information we need from the query
-        returndict = dictfetchall(cur,sql)
-
-        # report to the console what we recieved
-        print(returndict)
-    except:
-        # If there are any errors, we print something nice and return a null value
-        import traceback
+        users_dict = dict_fetch_all(cursor, sql)
+        print(users_dict)
+    except Exception as e:
         traceback.print_exc()
-        print("Error Fetching from Database", sys.exc_info()[0])
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
 
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return returndict
+    return users_dict
     
 
-def list_userroles():
-    # Get the database connection and set up the cursor
+def list_userroles() -> Optional[SqlResult]:
+
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+
+    if conn is None:
         return None
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    returndict = None
+
+    cursor = conn.cursor()
+    user_roles_dict = None
+
+    sql = """
+        SELECT *
+            FROM userroles
+    """
 
     try:
-        # Set-up our SQL query
-        sql = """SELECT *
-                    FROM userroles """
-        
-        # Retrieve all the information we need from the query
-        returndict = dictfetchall(cur,sql)
+        user_roles_dict = dict_fetch_all(cursor, sql)
+        print(user_roles_dict)
+    except Exception as e:
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
 
-        # report to the console what we recieved
-        print(returndict)
-    except:
-        # If there are any errors, we print something nice and return a null value
-        print("Error Fetching from Database", sys.exc_info()[0])
-
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return returndict
-    
+    return user_roles_dict
 
-########################
-#List Single Items#
-########################
 
-# Get all rows in users where a particular attribute matches a value
-def list_users_equifilter(attributename, filterval):
-    # Get the database connection and set up the cursor
+def list_users_equifilter(attribute: str,
+                          filter_val: str) -> Optional[SqlResult]:
+    """
+    Get all rows in users where a particular attribute matches a value
+    """
+
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+    if conn is None:
         return None
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    val = None
+
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT *
+            FROM users
+            WHERE %s = %s
+    """
+
+    sql_res = None
 
     try:
-        # Retrieve all the information we need from the query
-        sql = f"""SELECT *
-                    FROM users
-                    WHERE {attributename} = %s """
-        val = dictfetchall(cur,sql,(filterval,))
-    except:
-        # If there are any errors, we print something nice and return a null value
-        import traceback
+        sql_res = dict_fetch_all(cursor, sql, (attribute, filter_val))
+    except Exception as e:
         traceback.print_exc()
-        print("Error Fetching from Database: ", sys.exc_info()[0])
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
 
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return val
-    
+    return sql_res
 
 
-########################### 
-#List Report Items #
-###########################
-    
-# # A report with the details of Users, Userroles
-def list_consolidated_users():
-    # Get the database connection and set up the cursor
+def list_consolidated_users() -> Optional[SqlResult]:
+    """
+    A report with the details of Users, Userroles
+    """
+
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+
+    if conn is None:
         return None
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    returndict = None
+
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT *
+            FROM users 
+            JOIN userroles ON (users.userroleid = userroles.userroleid);
+    """
+
+    sql_res = None
 
     try:
-        # Set-up our SQL query
-        sql = """SELECT *
-                FROM users 
-                    JOIN userroles 
-                    ON (users.userroleid = userroles.userroleid) ;"""
-        
-        # Retrieve all the information we need from the query
-        returndict = dictfetchall(cur,sql)
+        sql_res = dict_fetch_all(cursor, sql)
+        print(sql_res)
+    except Exception as e:
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
 
-        # report to the console what we recieved
-        print(returndict)
-    except:
-        # If there are any errors, we print something nice and return a null value
-        print("Error Fetching from Database", sys.exc_info()[0])
-
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return returndict
+    return sql_res
 
-def list_user_stats():
-    # Get the database connection and set up the cursor
+
+def list_user_stats() -> Optional[SqlResult]:
+
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+
+    if conn is None:
         return None
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    returndict = None
+
+    cursor = conn.cursor()
+
+    sql = """
+        SELECT userroleid, COUNT(*) as count
+            FROM users 
+            GROUP BY userroleid
+            ORDER BY userroleid ASC;
+    """
+
+    sql_res = None
 
     try:
-        # Set-up our SQL query
-        sql = """SELECT userroleid, COUNT(*) as count
-                FROM users 
-                    GROUP BY userroleid
-                    ORDER BY userroleid ASC ;"""
-        
-        # Retrieve all the information we need from the query
-        returndict = dictfetchall(cur,sql)
+        sql_res = dict_fetch_all(cursor, sql)
+        print(sql_res)
+    except Exception as e:
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
 
-        # report to the console what we recieved
-        print(returndict)
-    except:
-        # If there are any errors, we print something nice and return a null value
-        print("Error Fetching from Database", sys.exc_info()[0])
-
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return returndict
+    return sql_res
     
 
-####################################
-##  Search Items - inexact matches #
-####################################
+def search_users_customfilter(attribute: str, filter_type: str,
+                              filter_val: str) -> Optional[SqlResult]:
+    """
+    Search for users with a custom filter
 
-# Search for users with a custom filter
-# filtertype can be: '=', '<', '>', '<>', '~', 'LIKE'
-def search_users_customfilter(attributename, filtertype, filterval):
-    # Get the database connection and set up the cursor
+    Useful for inexact matches
+
+    filter_type can be: '=', '<', '>', '<>', '~', 'LIKE'
+    """
+
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+
+    if conn is None:
         return None
 
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    val = None
+    cursor = conn.cursor()
+    sql_res = None
 
-    # arrange like filter
-    filtervalprefix = ""
-    filtervalsuffix = ""
-    if str.lower(filtertype) == "like":
-        filtervalprefix = "'%"
-        filtervalsuffix = "%'"
+    prefix = ""
+    suffix = ""
+
+    if filter_type.lower() == "like":
+        prefix = "'%"
+        suffix = "%'"
+
+    sql = """
+        SELECT *
+            FROM users
+            WHERE lower(%s) %s %slower(%s)%s
+    """
         
     try:
-        # Retrieve all the information we need from the query
-        sql = f"""SELECT *
-                    FROM users
-                    WHERE lower({attributename}) {filtertype} {filtervalprefix}lower(%s){filtervalsuffix} """
-        print_sql_string(sql, (filterval,))
-        val = dictfetchall(cur,sql,(filterval,))
-    except:
-        # If there are any errors, we print something nice and return a null value
-        import traceback
+        params = (attribute, filter_type, prefix, filter_val, suffix)
+
+        print_sql_string(sql, params)
+        sql_res = dict_fetch_all(cursor, sql, params)
+    except Exception as e:
         traceback.print_exc()
-        print("Error Fetching from Database: ", sys.exc_info()[0])
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
 
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return val
+    return sql_res
 
 
-#####################################
-##  Update Single Items by PK       #
-#####################################
+def update_single_user(user_id: str, first_name: str,
+                       last_name: str, user_role_id: str,
+                       password: str) -> Optional[SqlResult]:
+    """
+    Updates a single value by primary key
+    """
 
-
-# Update a single user
-def update_single_user(userid, firstname, lastname,userroleid,password):
-    # Get the database connection and set up the cursor
     conn = database_connect()
-    if(conn is None):
-        # If a connection cannot be established, send an Null object
+
+    if conn is None:
         return None
-    # Set up the rows as a dictionary
-    cur = conn.cursor()
-    val = None
+
+    cursor = conn.cursor()
+    sql_res = None
 
     # Data validation checks are assumed to have been done in route processing
 
+    set_query = ""
+    params = []
+
+    if first_name is not None:
+        set_query += "firstname = %s\n"
+        params.append(first_name)
+
+    if last_name is not None:
+        if len(params) > 0:
+            set_query += ","
+
+        set_query += "lastname = %s\n"
+        params.append(last_name)
+
+    if user_role_id is not None:
+        if len(params) > 0:
+            set_query += ","
+
+        set_query += "userroleid = %s::bigint\n"
+        params.append(user_role_id)
+
+    if password is not None:
+        if len(params) > 0:
+            set_query += ","
+
+        set_query += "password = %s\n"
+        params.append(password)
+
+    # f-string is ok here as it's hardcoded (not based on user input) and safe
+    sql = f"""
+        UPDATE users
+            SET {set_query}
+            WHERE userid = %s;
+    """
+
+    params.append(user_id)
+
     try:
-        setitems = ""
-        attcounter = 0
-        if firstname is not None:
-            setitems += "firstname = %s\n"
-            attcounter += 1
-        if lastname is not None:
-            if attcounter != 0:
-                setitems += ","
-            setitems += "lastname = %s\n"
-            attcounter += 1
-        if userroleid is not None:
-            if attcounter != 0:
-                setitems += ","
-            setitems += "userroleid = %s::bigint\n"
-            attcounter += 1
-        if password is not None:
-            if attcounter != 0:
-                setitems += ","
-            setitems += "password = %s\n"
-            attcounter += 1
-        # Retrieve all the information we need from the query
-        sql = f"""UPDATE users
-                    SET {setitems}
-                    WHERE userid = {userid};"""
-        print_sql_string(sql,(firstname, lastname,userroleid,password))
-        val = dictfetchone(cur,sql,(firstname, lastname,userroleid,password))
+        params = tuple(params)
+
+        print_sql_string(sql, params)
+        sql_res = dict_fetch_one(cursor, sql, params)
+
         conn.commit()
-        
-    except:
-        # If there are any errors, we print something nice and return a null value
-        print("Error Fetching from Database: ", sys.exc_info()[0])
+    except Exception as e:
+        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
         print(sys.exc_info())
 
-    # Close our connections to prevent saturation
-    cur.close()
+    cursor.close()
     conn.close()
 
-    # return our struct
-    return val
+    return sql_res
 
 
-##  Insert / Add
-
-def add_user_insert(userid, firstname, lastname,userroleid,password):
+def add_user_insert(user_id: str, first_name: str, last_name: str,
+                    user_role_id: str, password: str) -> Optional[SqlEntry]:
     """
-    Add a new User to the system
+    Add (inserts) a new User to the system
     """
+    
     # Data validation checks are assumed to have been done in route processing
 
     conn = database_connect()
-    if(conn is None):
+    
+    if conn is None:
         return None
-    cur = conn.cursor()
+    
+    cursor = conn.cursor()
+    
     sql = """
         INSERT into Users(userid, firstname, lastname, userroleid, password)
-        VALUES (%s,%s,%s,%s,%s);
-        """
-    print_sql_string(sql, (userid, firstname, lastname,userroleid,password))
+            VALUES (%s,%s,%s,%s,%s);
+    """
+
+    params = (user_id, first_name, last_name, user_role_id, password)
+    print_sql_string(sql, params)
+
+    sql_res = None
+
     try:
-        # Try executing the SQL and get from the database
+        cursor.execute(sql, params)
+        conn.commit()
 
-        cur.execute(sql,(userid, firstname, lastname,userroleid,password))
-        
-        # r = cur.fetchone()
-        r=[]
-        conn.commit()                   # Commit the transaction
+        sql_res = cursor.fetchone()
+
         print("return val is:")
-        print(r)
-        cur.close()                     # Close the cursor
-        conn.close()                    # Close the connection to the db
-        return r
-    except:
-        # If there were any errors, return a NULL row printing an error to the debug
-        print("Unexpected error adding a user:", sys.exc_info()[0])
-        cur.close()                     # Close the cursor
-        conn.close()                    # Close the connection to the db
-        raise
+        print(sql_res)
+    except Exception as e:
+        print(f"Unexpected error adding a user - {e}, {sys.exc_info()[0]}")
 
-##  Delete
-###     delete_user(userid)
-def delete_user(userid):
+    cursor.close()
+    conn.close()
+
+    return sql_res
+
+
+def delete_user(userid: str) -> Optional[SqlEntry]:
     """
     Remove a user from your system
     """
     # Data validation checks are assumed to have been done in route processing
     conn = database_connect()
-    if(conn is None):
-        return None
-    cur = conn.cursor()
-    try:
-        # Try executing the SQL and get from the database
-        sql = f"""
-        DELETE
-        FROM users
-        WHERE userid = '{userid}';
-        """
 
-        cur.execute(sql,())
-        conn.commit()                   # Commit the transaction
-        r = []
-        # r = cur.fetchone()
-        # print("return val is:")
-        # print(r)
-        cur.close()                     # Close the cursor
-        conn.close()                    # Close the connection to the db
-        return r
-    except:
-        # If there were any errors, return a NULL row printing an error to the debug
-        print("Unexpected error deleting  user with id ",userid, sys.exc_info()[0])
-        cur.close()                     # Close the cursor
-        conn.close()                    # Close the connection to the db
-        raise
+    if conn is None:
+        return None
+
+    cursor = conn.cursor()
+
+    sql = """
+        DELETE
+            FROM users
+            WHERE userid = '%s';
+    """
+
+    sql_res = None
+
+    try:
+        cursor.execute(sql, (userid,))
+        conn.commit()
+
+        sql_res = cursor.fetchone()
+
+        print("return val is:")
+        print(sql_res)
+    except Exception as e:
+        print(
+            f"Unexpected error deleting user with id {userid}"
+            f" - {e}, {sys.exc_info()[0]}"
+        )
+
+    cursor.close()
+    conn.close()
+
+    return sql_res
