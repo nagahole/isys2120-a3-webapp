@@ -32,7 +32,7 @@
         {% for item in users %}
             <tr class="align-items-center">
                 {% if session['isadmin'] == True %}
-                    <td> 
+                    <td>
                         {% if item['isadmin'] == True %}
                             <button disabled class="btn btn-danger" onclick="alert('Even an Admin should not delete an admin')">Delete</button>
                         {% else %}
@@ -60,7 +60,7 @@
                     <td class="align-middle">{{item['rolename']}}</td>
                     <td class="align-middle">Hidden</td>
                     <td class="align-middle">Hidden</td>
-                {% endif %} 
+                {% endif %}
             </tr>
         {% endfor %}
         </tbody>

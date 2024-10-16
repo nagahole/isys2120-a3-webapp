@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 
-import pg8000
 import configparser
 import sys
 import traceback
-
 from typing import Optional
+
+import pg8000
+
 
 SqlEntry = dict[str, any]
 SqlResult = list[SqlEntry]
+
+USERS_ATTRIBUTES = set()
 
 """
 Common Functions
@@ -43,7 +46,7 @@ def database_connect() -> Optional[pg8000.Connection]:
         targetdb = config[connection_target]["database"]
     else:
         targetdb = config[connection_target]["user"]
-        
+
     try:
         connection = pg8000.connect(
             database=targetdb,
@@ -73,8 +76,13 @@ def database_connect() -> Optional[pg8000.Connection]:
 # DATABASE HELPER FUNCTIONS                                                   #
 ###############################################################################
 
-def dict_fetch_all(cursor: pg8000.Cursor, sql: str,
-                   params=()) -> Optional[SqlResult]:
+
+def trace_fetch_err(err: Exception) -> None:
+    traceback.print_exc()
+    print(f"Error Fetching from Database - {err}, {sys.exc_info()[0]}")
+
+def dict_fetchall(cursor: pg8000.Cursor, sql: str,
+                  params=()) -> Optional[SqlResult]:
     """
     Returns query results as list of dictionaries
 
@@ -94,26 +102,26 @@ def dict_fetch_all(cursor: pg8000.Cursor, sql: str,
 
     if rows is not None:
         for row in rows:
-            result.append({a: b for a, b in zip(cols, row)})
+            result.append(dict(zip(cols, row)))
 
     print("returning result: ", result)
     return result
 
 
-def dict_fetch_one(cursor: pg8000.Cursor,
-                   sql: str, params=()) -> SqlResult:
+def dict_fetchone(cursor: pg8000.Cursor,
+                  sql: str, params=()) -> SqlResult:
     """
     Returns query results as list of dictionaries.
-    
-    Useful for create, update and delete queries that 
+
+    Useful for create, update and delete queries that
     only need to return one row
     """
 
     result = []
     cursor.execute(sql, params)
-    
+
     if cursor.description is not None:
-        
+
         print("cursor description", cursor.description)
 
         cols = [a[0] for a in cursor.description]
@@ -122,7 +130,7 @@ def dict_fetch_one(cursor: pg8000.Cursor,
         print("sql_result: ", sql_result)
 
         if sql_result is not None:
-            result.append({a: b for a, b in zip(cols, sql_result)})
+            result.append(dict(zip(cols, sql_result)))
 
     return result
 
@@ -157,7 +165,7 @@ def check_login(username: str, password: str) -> Optional[SqlResult]:
         SELECT *     
             FROM Users
             JOIN UserRoles ON (Users.userroleid = UserRoles.userroleid)
-            WHERE userid=%s AND password=%s
+            WHERE userid = %s AND password = %s
     """
 
     print_sql_string(sql, (username, password))
@@ -165,7 +173,7 @@ def check_login(username: str, password: str) -> Optional[SqlResult]:
     sql_res = None
 
     try:
-        sql_res = dict_fetch_one(cursor, sql, (username, password))
+        sql_res = dict_fetchone(cursor, sql, (username, password))
     except Exception as e:
         traceback.print_exc()
         print(f"Error Invalid Login - {e}")
@@ -173,7 +181,7 @@ def check_login(username: str, password: str) -> Optional[SqlResult]:
     cursor.close()
     conn.close()
     return sql_res
-    
+
 
 def list_users() -> Optional[SqlResult]:
     """
@@ -191,23 +199,22 @@ def list_users() -> Optional[SqlResult]:
 
     sql = """
         SELECT *
-            FROM users
+            FROM Users
     """
 
     users_dict = None
 
     try:
-        users_dict = dict_fetch_all(cursor, sql)
+        users_dict = dict_fetchall(cursor, sql)
         print(users_dict)
     except Exception as e:
-        traceback.print_exc()
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
+        trace_fetch_err(e)
 
     cursor.close()
     conn.close()
 
     return users_dict
-    
+
 
 def list_userroles() -> Optional[SqlResult]:
 
@@ -225,10 +232,10 @@ def list_userroles() -> Optional[SqlResult]:
     """
 
     try:
-        user_roles_dict = dict_fetch_all(cursor, sql)
+        user_roles_dict = dict_fetchall(cursor, sql)
         print(user_roles_dict)
     except Exception as e:
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
+        trace_fetch_err(e)
 
     cursor.close()
     conn.close()
@@ -241,31 +248,7 @@ def list_users_equifilter(attribute: str,
     """
     Get all rows in users where a particular attribute matches a value
     """
-
-    conn = database_connect()
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        SELECT *
-            FROM users
-            WHERE %s = %s
-    """
-
-    sql_res = None
-
-    try:
-        sql_res = dict_fetch_all(cursor, sql, (attribute, filter_val))
-    except Exception as e:
-        traceback.print_exc()
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
-
-    cursor.close()
-    conn.close()
-
-    return sql_res
+    return search_users_customfilter(attribute, "=", filter_val)
 
 
 def list_consolidated_users() -> Optional[SqlResult]:
@@ -282,17 +265,17 @@ def list_consolidated_users() -> Optional[SqlResult]:
 
     sql = """
         SELECT *
-            FROM users 
+            FROM Users 
             JOIN userroles ON (users.userroleid = userroles.userroleid);
     """
 
     sql_res = None
 
     try:
-        sql_res = dict_fetch_all(cursor, sql)
+        sql_res = dict_fetchall(cursor, sql)
         print(sql_res)
     except Exception as e:
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
+        trace_fetch_err(e)
 
     cursor.close()
     conn.close()
@@ -311,7 +294,7 @@ def list_user_stats() -> Optional[SqlResult]:
 
     sql = """
         SELECT userroleid, COUNT(*) as count
-            FROM users 
+            FROM Users 
             GROUP BY userroleid
             ORDER BY userroleid ASC;
     """
@@ -319,16 +302,58 @@ def list_user_stats() -> Optional[SqlResult]:
     sql_res = None
 
     try:
-        sql_res = dict_fetch_all(cursor, sql)
+        sql_res = dict_fetchall(cursor, sql)
         print(sql_res)
     except Exception as e:
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
+        trace_fetch_err(e)
 
     cursor.close()
     conn.close()
 
     return sql_res
-    
+
+
+VALID_FILTERS: set[str] = {"=", "<", ">", "<>", "~", "LIKE"}
+
+
+def valid_users_attribute(attribute: str) -> bool:
+
+    if len(USERS_ATTRIBUTES) == 0 and not fetch_users_attributes():
+        return False
+
+    return attribute in USERS_ATTRIBUTES
+
+
+def fetch_users_attributes() -> bool:
+
+    conn = database_connect()
+
+    if conn is None:
+        return False
+
+    cursor = conn.cursor()
+
+    columns = None
+
+    try:
+        cursor.execute("DESCRIBE Users")
+        columns = cursor.fetchall()
+    except Exception as e:
+        trace_fetch_err(e)
+
+    conn.close()
+    cursor.close()
+
+    if columns is None:
+        return False
+
+    USERS_ATTRIBUTES.clear()
+
+    for column in columns:
+        USERS_ATTRIBUTES.add(column[0])
+
+    return True
+
 
 def search_users_customfilter(attribute: str, filter_type: str,
                               filter_val: str) -> Optional[SqlResult]:
@@ -339,6 +364,12 @@ def search_users_customfilter(attribute: str, filter_type: str,
 
     filter_type can be: '=', '<', '>', '<>', '~', 'LIKE'
     """
+
+    if filter_type not in VALID_FILTERS:
+        return None
+
+    if not valid_users_attribute(attribute):
+        return None
 
     conn = database_connect()
 
@@ -355,20 +386,17 @@ def search_users_customfilter(attribute: str, filter_type: str,
         prefix = "'%"
         suffix = "%'"
 
-    sql = """
+    sql = f"""
         SELECT *
-            FROM users
-            WHERE lower(%s) %s %slower(%s)%s
+            FROM Users
+            WHERE lower({attribute}) {filter_type} {prefix}lower(%s){suffix}
     """
-        
-    try:
-        params = (attribute, filter_type, prefix, filter_val, suffix)
 
-        print_sql_string(sql, params)
-        sql_res = dict_fetch_all(cursor, sql, params)
+    try:
+        print_sql_string(sql, (filter_val,))
+        sql_res = dict_fetchall(cursor, sql, (filter_val,))
     except Exception as e:
-        traceback.print_exc()
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
+        trace_fetch_err(e)
 
     cursor.close()
     conn.close()
@@ -434,12 +462,11 @@ def update_single_user(user_id: str, first_name: str,
         params = tuple(params)
 
         print_sql_string(sql, params)
-        sql_res = dict_fetch_one(cursor, sql, params)
+        sql_res = dict_fetchone(cursor, sql, params)
 
         conn.commit()
     except Exception as e:
-        print(f"Error Fetching from Database - {e}, {sys.exc_info()[0]}")
-        print(sys.exc_info())
+        trace_fetch_err(e)
 
     cursor.close()
     conn.close()
@@ -452,16 +479,16 @@ def add_user_insert(user_id: str, first_name: str, last_name: str,
     """
     Add (inserts) a new User to the system
     """
-    
+
     # Data validation checks are assumed to have been done in route processing
 
     conn = database_connect()
-    
+
     if conn is None:
         return None
-    
+
     cursor = conn.cursor()
-    
+
     sql = """
         INSERT into Users(userid, firstname, lastname, userroleid, password)
             VALUES (%s,%s,%s,%s,%s);
@@ -503,7 +530,7 @@ def delete_user(userid: str) -> Optional[SqlEntry]:
 
     sql = """
         DELETE
-            FROM users
+            FROM Users
             WHERE userid = '%s';
     """
 

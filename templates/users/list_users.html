@@ -26,7 +26,7 @@
         {% for item in users %}
             <tr class="align-items-center">
                 {% if session['isadmin'] == True %}
-                    <td> 
+                    <td>
                         {% if item['isadmin'] == True %}
                             <button onclick="alert('This would delete user {{item['userid']}} by calling url_for(\'delete_user({{item['userid']}})\')')" class="btn btn-danger">Delete</button>
                         {% else %}
@@ -45,7 +45,7 @@
                     <td class="align-middle">{{item['lastname']}}</td>
                     <td class="align-middle">{{item['userroleid']}}</td>
                     <td class="align-middle"><i>Admin only</i></td>
-                {% endif %} 
+                {% endif %}
             </tr>
         {% endfor %}
         </tbody>
