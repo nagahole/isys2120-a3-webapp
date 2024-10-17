@@ -1,5 +1,4 @@
 import configparser
-from typing import Optional
 
 from flask import *
 
@@ -99,7 +98,7 @@ def login():
             flash(errortext)
             return redirect(url_for("login"))
 
-        # If it"s null, or nothing came up, flash a message saying error
+        # If it's null, or nothing came up, flash a message saying error
         # And make them go back to the login screen
         if logins is None or len(logins) < 1:
             flash("There was an error logging you in")
@@ -213,7 +212,7 @@ def list_user_stats():
 
 
 @app.route("/users/search", methods=["POST", "GET"])
-def search_users_byname():
+def search_users_by_name():
     """
     List all rows in users that match a particular name
     """
@@ -244,7 +243,7 @@ def search_users_byname():
             return redirect(url_for("index"))
 
         users_listdict = search
-        # Handle the null condition"
+        # Handle the null condition
         print(users_listdict)
 
         if users_listdict is None or len(users_listdict) == 0:
@@ -263,25 +262,55 @@ def search_users_byname():
         )
 
     else:
-        return render_template("users/search_users.html", page=page, session=session)
+        return render_template(
+            "users/search_users.html",
+            page=page, session=session
+        )
+
 
 @app.route("/users/delete/<userid>")
 def delete_user(userid):
     """
     Delete a user
     """
-    # connect to the database and call the relevant function
-    resultval = database.delete_user(userid)
 
-    page["title"] = f"List users after user {userid} has been deleted"
+    response = database.delete_user(userid)
+
+    if response is None:
+        page["title"] = f"List users after user {userid} has been deleted"
+    else:
+        page["title"] = f"Error deleting {userid}. Are they a valid user?"
+
     return redirect(url_for("list_consolidated_users"))
 
-@app.route("/users/update", methods=["POST","GET"])
+
+USER_FORM_ATTRIBUTES = ("firstname", "lastname", "userroleid", "password")
+
+
+def extract_from_form(form, default_values: tuple) -> tuple[dict, bool]:
+
+    user_dict: dict[str, any] = {"userid": form["userid"]}
+    some_value_present = False
+
+    print("We have a value: ", user_dict["userid"])
+
+    for attr, default in zip(USER_FORM_ATTRIBUTES, default_values):
+        if attr in form:
+            some_value_present = True
+            user_dict[attr] = form[attr]
+            print("We have a value: ", user_dict[attr])
+        else:
+            user_dict[attr] = default
+
+    return user_dict, some_value_present
+
+
+@app.route("/users/update", methods=["POST"])
 def update_user():
     """
     Update details for a user
     """
-    # # Check if the user is logged in, if not: back to login.
+
     if not session.logged_in:
         return redirect(url_for("login"))
 
@@ -291,77 +320,37 @@ def update_user():
 
     page["title"] = "Update user details"
 
-    userslist = None
-
     print("request form is:")
-    newdict: dict[str, Optional[str]] = {}
     print(request.form)
 
-    validupdate = False
-    # Check your incoming parameters
-    if request.method == "POST":
+    if "userid" not in request.form:
+        flash("Can not update without a userid")
+        return redirect(url_for("list_users"))
 
-        # verify that at least one value is available:
-        if "userid" not in request.form:
-            # should be an exit condition
-            flash("Can not update without a userid")
-            return redirect(url_for("list_users"))
-        else:
-            newdict["userid"] = request.form["userid"]
-            print("We have a value: ",newdict["userid"])
+    user_dict, valid_update = extract_from_form(request.form, (None,) * 4)
 
-        if "firstname" not in request.form:
-            newdict["firstname"] = None
-        else:
-            validupdate = True
-            newdict["firstname"] = request.form["firstname"]
-            print("We have a value: ",newdict["firstname"])
+    print("Update dict is:")
+    print(user_dict, valid_update)
 
-        if "lastname" not in request.form:
-            newdict["lastname"] = None
-        else:
-            validupdate = True
-            newdict["lastname"] = request.form["lastname"]
-            print("We have a value: ",newdict["lastname"])
+    if not valid_update:
+        flash("No updated values for user with userid")
+        return redirect(url_for("list_users"))
 
-        if "userroleid" not in request.form:
-            newdict["userroleid"] = None
-        else:
-            validupdate = True
-            newdict["userroleid"] = request.form["userroleid"]
-            print("We have a value: ",newdict["userroleid"])
+    database.update_single_user(user_dict["userid"],
+                                user_dict["firstname"],
+                                user_dict["lastname"],
+                                user_dict["userroleid"],
+                                user_dict["password"])
 
-        if "password" not in request.form:
-            newdict["password"] = None
-        else:
-            validupdate = True
-            newdict["password"] = request.form["password"]
-            print("We have a value: ",newdict["password"])
+    return list_single_users(user_dict["userid"])
 
-        print("Update dict is:")
-        print(newdict, validupdate)
 
-        if validupdate:
-            #forward to the database to manage update
-            userslist = database.update_single_user(newdict["userid"],newdict["firstname"],newdict["lastname"],newdict["userroleid"],newdict["password"])
-        else:
-            # no updates
-            flash("No updated values for user with userid")
-            return redirect(url_for("list_users"))
-        # Should redirect to your newly updated user
-        return list_single_users(newdict["userid"])
-    else:
-        return redirect(url_for("list_consolidated_users"))
-
-######
-## Edit user
-######
-@app.route("/users/edit/<userid>", methods=["POST","GET"])
+@app.route("/users/edit/<userid>", methods=["GET"])
 def edit_user(userid):
     """
     Edit a user
     """
-    # Check if the user is logged in, if not: back to login.
+
     if not session.logged_in:
         return redirect(url_for("login"))
 
@@ -371,94 +360,27 @@ def edit_user(userid):
 
     page["title"] = "Edit user details"
 
-    users_listdict = None
-    users_listdict = database.list_users_equifilter("userid", userid)
+    users_list_dict = database.list_users_equifilter("userid", userid) or []
 
-    # Handle the null condition
-    if users_listdict is None or len(users_listdict) == 0:
-        # Create an empty list and show error message
-        users_listdict = []
-        flash("Error, there are no rows in users that match the attribute 'userid' for the value "+userid)
+    if len(users_list_dict) == 0:
+        flash(f"Error: No users matching id '{userid}'")
+        return redirect(url_for("list_consolidated_users"))
 
-    userslist = None
-    print("request form is:")
-    newdict: dict[str, Optional[str]] = {}
-    print(request.form)
-    user = users_listdict[0]
-    validupdate = False
+    user = users_list_dict[0]
 
-    # Check your incoming parameters
-    if request.method == "POST":
-
-        # verify that at least one value is available:
-        if "userid" not in request.form:
-            # should be an exit condition
-            flash("Can not update without a userid")
-            return redirect(url_for("list_users"))
-        else:
-            newdict["userid"] = request.form["userid"]
-            print("We have a value: ",newdict["userid"])
-
-        if "firstname" not in request.form:
-            newdict["firstname"] = None
-        else:
-            validupdate = True
-            newdict["firstname"] = request.form["firstname"]
-            print("We have a value: ",newdict["firstname"])
-
-        if "lastname" not in request.form:
-            newdict["lastname"] = None
-        else:
-            validupdate = True
-            newdict["lastname"] = request.form["lastname"]
-            print("We have a value: ",newdict["lastname"])
-
-        if "userroleid" not in request.form:
-            newdict["userroleid"] = None
-        else:
-            validupdate = True
-            newdict["userroleid"] = request.form["userroleid"]
-            print("We have a value: ",newdict["userroleid"])
-
-        if "password" not in request.form:
-            newdict["password"] = None
-        else:
-            validupdate = True
-            newdict["password"] = request.form["password"]
-            print("We have a value: ",newdict["password"])
-
-        print("Update dict is:")
-        print(newdict, validupdate)
-
-        if validupdate:
-            #forward to the database to manage update
-            userslist = database.update_single_user(newdict["userid"],newdict["firstname"],newdict["lastname"],newdict["userroleid"],newdict["password"])
-        else:
-            # no updates
-            flash("No updated values for user with userid")
-            return redirect(url_for("list_users"))
-        # Should redirect to your newly updated user
-        return list_single_users(newdict["userid"])
-    else:
-        # assuming GET request, need to setup for this
-        return render_template("users/edit_user.html",
-                               session=session,
-                               page=page,
-                               userroles=database.list_userroles(),
-                               user=user)
+    return render_template("users/edit_user.html",
+                           session=session,
+                           page=page,
+                           userroles=database.list_userroles(),
+                           user=user)
 
 
-######
-## add items
-######
-
-
-@app.route("/users/add", methods=["POST","GET"])
+@app.route("/users/add", methods=["POST", "GET"])
 def add_user():
     """
     Add a new User
     """
-    # # Check if the user is logged in, if not: back to login.
+
     if not session.logged_in:
         return redirect(url_for("login"))
 
@@ -468,57 +390,36 @@ def add_user():
 
     page["title"] = "Add user details"
 
-    userslist = None
-    print("request form is:")
-    newdict: dict[str, any] = {}
-    print(request.form)
-
     # Check your incoming parameters
-    if request.method == "POST":
-
-        # verify that all values are available:
-        if "userid" not in request.form:
-            # should be an exit condition
-            flash("Can not add user without a userid")
-            return redirect(url_for("add_user"))
-        else:
-            newdict["userid"] = request.form["userid"]
-            print("We have a value: ",newdict["userid"])
-
-        if "firstname" not in request.form:
-            newdict["firstname"] = "Empty firstname"
-        else:
-            newdict["firstname"] = request.form["firstname"]
-            print("We have a value: ",newdict["firstname"])
-
-        if "lastname" not in request.form:
-            newdict["lastname"] = "Empty lastname"
-        else:
-            newdict["lastname"] = request.form["lastname"]
-            print("We have a value: ",newdict["lastname"])
-
-        if "userroleid" not in request.form:
-            newdict["userroleid"] = 1 # default is traveler
-        else:
-            newdict["userroleid"] = request.form["userroleid"]
-            print("We have a value: ",newdict["userroleid"])
-
-        if "password" not in request.form:
-            newdict["password"] = "blank"
-        else:
-            newdict["password"] = request.form["password"]
-            print("We have a value: ",newdict["password"])
-
-        print("Insert parametesrs are:")
-        print(newdict)
-
-        database.add_user_insert(newdict["userid"], newdict["firstname"],newdict["lastname"],newdict["userroleid"],newdict["password"])
-        # Should redirect to your newly updated user
-        print("did it go wrong here?")
-        return redirect(url_for("list_consolidated_users"))
-    else:
-        # assuming GET request, need to setup for this
+    if request.method == "GET":
         return render_template("users/add_user.html",
                                session=session,
                                page=page,
                                userroles=database.list_userroles())
+
+    # else POST
+
+    print("request form is:")
+    print(request.form)
+
+    if "userid" not in request.form:
+        flash("Can not add user without a userid")
+        return redirect(url_for("add_user"))
+
+    user_dict, _ = extract_from_form(
+        request.form,
+        ("Empty firstname", "Empty lastname", 1, "blank")
+    )
+
+    print("Insert parameters are:")
+    print(user_dict)
+
+    database.add_user_insert(user_dict["userid"],
+                             user_dict["firstname"],
+                             user_dict["lastname"],
+                             user_dict["userroleid"],
+                             user_dict["password"])
+
+    # TODO Should redirect to your newly updated user
+    print("did it go wrong here?")
+    return redirect(url_for("list_consolidated_users"))

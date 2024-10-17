@@ -81,6 +81,7 @@ def trace_fetch_err(err: Exception) -> None:
     traceback.print_exc()
     print(f"Error Fetching from Database - {err}, {sys.exc_info()[0]}")
 
+
 def dict_fetchall(cursor: pg8000.Cursor, sql: str,
                   params=()) -> Optional[SqlResult]:
     """
@@ -318,13 +319,13 @@ VALID_FILTERS: set[str] = {"=", "<", ">", "<>", "~", "LIKE"}
 
 def valid_users_attribute(attribute: str) -> bool:
 
-    if len(USERS_ATTRIBUTES) == 0 and not fetch_users_attributes():
+    if len(USERS_ATTRIBUTES) == 0 and not __fetch_user_atributes():
         return False
 
     return attribute in USERS_ATTRIBUTES
 
 
-def fetch_users_attributes() -> bool:
+def __fetch_user_atributes() -> bool:
 
     conn = database_connect()
 
