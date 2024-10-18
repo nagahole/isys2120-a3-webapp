@@ -2,6 +2,83 @@
 
 <div id="content" class="container my-4">
     <h1 class="page-title">{{page.get('title', 'Tickets')}}</h1>
+
+    <!-- Pagination Controls -->
+    <nav aria-label="Page navigation">
+        <div class="d-flex flex-row justify-content-between">
+
+            <!-- First Arrow -->
+            <div class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('list_tickets', page=1) }}" aria-label="Previous">
+                    <span aria-hidden="true">&laquo;</span>
+                </a>
+            </div>
+
+            <!-- Center Pagination Row -->
+            <div class="d-flex px-5" style="flex: 1;">
+
+                <!-- Left Pages -->
+                <div style="flex: 5;">
+                    <ul class="pagination pagination-sm w-100">
+                        {% for page_num in range(pagination.page - pagination.max_jump, pagination.page) %}
+                            {% if page_num >= 1 %}
+                            <li class="page-item" style="flex: 1;">
+                                <a class="page-link text-center" href="{{ url_for('list_tickets', page=page_num) }}">{{ page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled" style="flex: 1;">
+                                <a class="page-link text-center bg-light">·</a>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <!-- Current Page -->
+                <div class="px-4 justify-content-center align-self-start" style="flex: 2.4;">
+                    <form action="">
+                        <input
+                            name="page"
+                            placeholder="Page no.."
+                            type="number"
+                            min="1"
+                            max="{{ pagination.pages }}"
+                            step="1"
+                            class="form-control text-center text-primary no-arrows"
+                            value="{{ pagination.page }}"
+                        />
+                    </form>
+                </div>
+
+                <!-- Right Pages -->
+                <div style="flex: 5;">
+                    <ul class="pagination pagination-sm w-100">
+                        {% for page_num in range(pagination.page + 1, pagination.page + pagination.max_jump + 1) %}
+                            {% if page_num <= pagination.pages %}
+                            <li class="page-item text-center" style="flex: 1;">
+                                <a class="page-link" href="{{ url_for('list_tickets', page=page_num) }}">{{ page_num }}</a>
+                            </li>
+                            {% else %}
+                            <li class="page-item text-center disabled" style="flex: 1;">
+                                <a class="page-link bg-light">·</a>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ul>
+                </div>
+
+            </div>
+
+            <!-- Last Arrow -->
+            <div class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('list_tickets', page=pagination.pages) }}" aria-label="Next">
+                    <span aria-hidden="true">&raquo;</span>
+                </a>
+            </div>
+
+        </div>
+    </nav>
+
     <table class="table table-striped">
         <thead>
             <tr>

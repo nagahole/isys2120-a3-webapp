@@ -9,11 +9,18 @@ import pg8000
 
 from LowercaseDefaultDict import LowercaseDefaultDict
 
+
+# CONSTANTS
+
+TICKETS_PER_PAGE = 50
+
+# TYPEHINTS
+
 SqlEntry = dict[str, any]
 SqlResult = list[SqlEntry]
-
 SqlFetcher = Callable[[pg8000.Cursor], any]
 
+# GLOBAL VARIABLES
 
 table_attributes = LowercaseDefaultDict(set)
 
@@ -23,20 +30,33 @@ table_attributes = LowercaseDefaultDict(set)
 ###############################################################################
 
 
-def list_tickets() -> Optional[SqlResult]:
+def tickets_count() -> Optional[int]:
+    sql = """
+        SELECT Count(TicketID) AS count
+            FROM Tickets
+    """
+
+    response = execute_and_fetch(dict_fetchone, sql)
+
+    if response is None:
+        return None
+
+    return response[0]["count"]
+
+
+def list_tickets(page: int) -> Optional[SqlResult]:
     """
     Lists all tickets
 
     Gets all the rows of Tickets table and returns them as a dict
     """
 
-    # TODO pagination
-
-    sql = """
+    sql = f"""
         SELECT *
             FROM Tickets
             ORDER BY TicketID ASC
-            LIMIT 10
+            LIMIT {TICKETS_PER_PAGE}
+            OFFSET {(page - 1) * TICKETS_PER_PAGE}
     """
 
     return execute_and_fetch(dict_fetchall, sql)

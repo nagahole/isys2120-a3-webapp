@@ -1,4 +1,5 @@
 import configparser
+import math
 from datetime import datetime
 from typing import Optional
 
@@ -7,9 +8,14 @@ from flask import *
 import database
 from session import Session
 
+# TODO pagination
+# - middle input to jump
+# - items per page
+# TODO columns sort
+# TODO search ranges
 
-DATABASE_ERR_TEXT = \
-    "Error connecting to database - Invalid credentials in config?"
+
+DATABASE_ERR_TEXT = "Error connecting to database"
 
 
 # web-app setup
@@ -43,17 +49,38 @@ if portchoice == "10000":
 
 @app.route("/tickets")
 def list_tickets():
+    page_no = request.args.get("page", 1, type=int)
+    total_tickets = database.tickets_count()
 
-    tickets_listdict = database.list_tickets()
+    if total_tickets is None:
+        flash("Error accessing tickets information")
+        return redirect(url_for("index"))
+
+    tickets_listdict = database.list_tickets(page_no)
 
     if tickets_listdict is None:  # error fetching tickets
         tickets_listdict = []
         flash("Error fetching tickets")
 
+    num_pages = math.ceil(total_tickets / database.TICKETS_PER_PAGE)
+
+    pagination = {
+        "page": page_no,
+        "per_page": database.TICKETS_PER_PAGE,
+        "total": total_tickets,
+        "pages": num_pages,
+        "has_prev": page_no > 1,
+        "has_next": page_no < num_pages,
+        "max_jump": 5
+    }
+
     page["title"] = "List Contents of Tickets"
     return render_template(
         "tickets/list_tickets.html",
-        page=page, session=session, tickets=tickets_listdict
+        page=page,
+        session=session,
+        tickets=tickets_listdict,
+        pagination=pagination
     )
 
 
