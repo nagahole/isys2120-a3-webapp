@@ -4,12 +4,7 @@
 
         <h2 class="title"> Add Ticket </h2>
 
-        {% if add_mode %}
-            <form class="needs-validation" method="POST" action="{{ url_for('add_ticket') }}" novalidate>
-        {% else %}
-            <form class="needs-validation" method="POST" action="{{ url_for('update_ticket') }}" novalidate>
-        {% endif %}
-
+        <form class="needs-validation" method="POST" action="{{ url_for('add_ticket') }}" novalidate>
             <div class="form-group">
                 <label for="ticketid">Ticket ID:</label>
                 <input type="number" step="1" class="form-control" id="ticketid" name="ticketid" placeholder="Enter ticket ID here" required>
@@ -36,7 +31,7 @@
 
             <div class="form-group">
                 <label for="bookingdate">Booking Date:</label>
-                <input type="date" class="form-control" id="bookingdate" name="bookingdate" placeholder="Select booking date here" required>
+                <input type="datetime-local" class="form-control" id="bookingdate" name="bookingdate" placeholder="Select booking date here" required>
                 <div class="invalid-feedback">Please select a Booking Date.</div>
             </div>
 

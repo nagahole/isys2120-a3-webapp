@@ -1,4 +1,6 @@
 import configparser
+from datetime import datetime
+from typing import Optional
 
 from flask import *
 
@@ -61,6 +63,12 @@ def list_single_tickets(ticketid):
     List all rows in tickets that match the specified ticketid
     """
 
+    try:
+        ticketid = int(ticketid)
+    except ValueError:
+        flash("TicketID must be an integer")
+        return redirect(url_for("list_tickets"))
+
     tickets_listdict = database.list_table_equifilter(
         "Tickets", "ticketid", ticketid
     ) or []
@@ -110,11 +118,26 @@ def search_tickets():
 
     # else POST
 
+    attribute = request.form["searchfield"].lower()
+    search = request.form["searchterm"].lower()
+
+    if attribute != "ticketid" and attribute not in TICKET_FORM_ATTRIBUTES:
+        flash(f"Search field {attribute} doesn't exist")
+        return redirect(url_for("search_tickets"))
+
+    typ = int if attribute == "ticketid" else TICKET_FORM_ATTRIBUTES[attribute]
+
+    try:
+        search = typ(search)
+    except ValueError:
+        flash(f"Search field in wrong form")
+        return redirect(url_for("search_tickets"))
+
     tickets_listdict = database.search_table_equifilter(
         "Tickets",
-        request.form["searchfield"],
-        "~",
-        request.form["searchterm"]
+        attribute,
+        "~" if isinstance(search, str) else "=",
+        search
     )
 
     print(tickets_listdict)
@@ -125,13 +148,13 @@ def search_tickets():
 
     if len(tickets_listdict) == 0:
         flash(
-            f"No items found for search: "
-            f"{request.form['searchfield']}, {request.form['searchterm']}"
+            f"No items found for search "
+            f"{request.form['searchfield']}: {request.form['searchterm']}"
         )
 
         return redirect(url_for("index"))
 
-    page["title"] = "Tickets search by name"
+    page["title"] = f"Tickets search {attribute}"
 
     return render_template(
         "tickets/list_tickets.html",
@@ -145,6 +168,16 @@ def delete_ticket(ticketid):
     Delete a ticket
     """
 
+    if not session.isadmin:
+        flash("Only admins can delete tickets!")
+        return redirect(url_for("index"))
+
+    try:
+        ticketid = int(ticketid)
+    except ValueError:
+        flash("TicketID must be an integer")
+        return redirect(url_for("list_tickets"))
+
     response = database.delete_ticket(ticketid)
 
     if response is None:
@@ -155,37 +188,32 @@ def delete_ticket(ticketid):
     return redirect(url_for("list_tickets"))
 
 
-TICKET_FORM_ATTRIBUTES = (
-    "flightid",
-    "passengerid",
-    "ticketnumber",
-    "bookingdate",
-    "seatnumber",
-    "class",
-    "price"
-)
-
-TICKET_FORM_ATTRIBUTE_TYPES = (
-    int,
-    int,
-    str,
-    str,
-    str,
-    str,
-    float
-)
+TICKET_FORM_ATTRIBUTES = {
+    "flightid": int,
+    "passengerid": int,
+    "ticketnumber": str,
+    "bookingdate": lambda s: datetime.strptime(s.strip(), "%Y-%m-%d %H:%M:%S"),
+    "seatnumber": str,
+    "class": str,
+    "price": float
+}
 
 
-def extract_from_ticket_form(form, default_values: tuple) -> tuple[dict, bool]:
+def extract_from_ticket_form(form, default_values: tuple) \
+        -> Optional[tuple[dict, bool]]:
 
-    ticket_dict: dict[str, any] = {"ticketid": form["ticketid"]}
+    try:
+        ticketid = form["ticketid"]
+    except ValueError:
+        return None
+
+    ticket_dict: dict[str, any] = {"ticketid": ticketid}
     some_value_present = False
 
     print("We have a value: ", ticket_dict["ticketid"])
 
-    for attr, typ, default in zip(
-        TICKET_FORM_ATTRIBUTES,
-        TICKET_FORM_ATTRIBUTE_TYPES,
+    for (attr, typ), default in zip(
+        TICKET_FORM_ATTRIBUTES.items(),
         default_values
     ):
         try:
@@ -220,8 +248,8 @@ def update_ticket():
         flash("Can not update without a ticketid")
         return redirect(url_for("list_tickets"))
 
-    ticket_dict, valid_update = extract_from_user_form(
-        request.form, (None,) * 4
+    ticket_dict, valid_update = extract_from_ticket_form(
+        request.form, (None,) * 7
     )
 
     print("Update dict is:")
@@ -259,6 +287,12 @@ def edit_ticket(ticketid):
         flash("Only admins can update ticket details!")
         return redirect(url_for("index"))
 
+    try:
+        ticketid = int(ticketid)
+    except ValueError:
+        flash("TicketID must be an integer")
+        return redirect(url_for("list_tickets"))
+
     page["title"] = "Edit ticket details"
 
     tickets_list_dict = database.list_table_equifilter(
@@ -266,16 +300,17 @@ def edit_ticket(ticketid):
     ) or []
 
     if len(tickets_list_dict) == 0:
-        flash(f"Error: No tickets matching id '{ticketid}'")
+        flash(f"Error: No tickets matching id {ticketid}")
         return redirect(url_for("list_tickets"))
 
     ticket = tickets_list_dict[0]
+    ticket["bookingdate"] = ticket.get("bookingdate", datetime.min)\
+        .strftime("%Y-%m-%dT%H:%M")
 
-    return render_template("tickets/ticket_form.html",
+    return render_template("tickets/edit_ticket.html",
                            session=session,
                            page=page,
-                           ticket=ticket,
-                           add_mode=True)
+                           ticket=ticket)
 
 
 @app.route("/tickets/add", methods=["POST", "GET"])
@@ -294,7 +329,7 @@ def add_ticket():
     page["title"] = "Add ticket details"
 
     if request.method == "GET":
-        return render_template("tickets/ticket_form.html",
+        return render_template("tickets/add_ticket.html",
                                session=session,
                                page=page)
 
@@ -307,7 +342,7 @@ def add_ticket():
         flash("Can not add ticket without a ticketid")
         return redirect(url_for("add_ticket"))
 
-    ticket_dict, _ = extract_from_ticket_form(
+    extraction = extract_from_ticket_form(
         request.form,
         (
             0,
@@ -319,6 +354,12 @@ def add_ticket():
             -1
         )
     )
+
+    if extraction is None:
+        flash("Error adding ticket (invalid ticketid?)")
+        return redirect(url_for("index"))
+
+    ticket_dict, _ = extraction
 
     print("Insert parameters are:")
     print(ticket_dict)
@@ -450,8 +491,8 @@ def search_users():
 
     if len(users_listdict) == 0:
         flash(
-            f"No items found for search: "
-            f"{request.form['searchfield']}, {request.form['searchterm']}"
+            f"No items found for search "
+            f"{request.form['searchfield']}: {request.form['searchterm']}"
         )
         return redirect(url_for("index"))
 
@@ -469,6 +510,10 @@ def delete_user(userid):
     Delete a user
     """
 
+    if not session.isadmin:
+        flash("Only admins can delete users!")
+        return redirect(url_for("index"))
+
     response = database.delete_user(userid)
 
     if response is None:
@@ -479,8 +524,12 @@ def delete_user(userid):
     return redirect(url_for("list_consolidated_users"))
 
 
-USER_FORM_ATTRIBUTES = ("firstname", "lastname", "userroleid", "password")
-USER_FORM_ATTRIBUTE_TYPES = (str, str, int, str)
+USER_FORM_ATTRIBUTES = {
+    "firstname": str,
+    "lastname": str,
+    "userroleid": int,
+    "password": str
+}
 
 
 def extract_from_user_form(form, default_values: tuple) -> tuple[dict, bool]:
@@ -490,9 +539,8 @@ def extract_from_user_form(form, default_values: tuple) -> tuple[dict, bool]:
 
     print("We have a value: ", user_dict["userid"])
 
-    for attr, typ, default in zip(
-        USER_FORM_ATTRIBUTES,
-        USER_FORM_ATTRIBUTE_TYPES,
+    for (attr, typ), default in zip(
+        USER_FORM_ATTRIBUTES.items(),
         default_values
     ):
         try:
@@ -683,7 +731,7 @@ def login():
     session.name = login_response[0]["firstname"]
     session.userid = login_response[0]["userid"]
     session.logged_in = True
-    session.isadmin = True  # TODO login_response[0]["isadmin"]
+    session.isadmin = login_response[0]["isadmin"]
     return redirect(url_for("index"))
 
 

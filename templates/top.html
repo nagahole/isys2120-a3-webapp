@@ -71,7 +71,9 @@
           <div class="dropdown-menu" aria-labelledby="navbarDropdownTickets">
             <a class="dropdown-item" href="{{ url_for('list_tickets') }}">List tickets</a>
             <a class="dropdown-item" href="{{ url_for('search_tickets') }}">Ticket search</a>
-            <a class="dropdown-item" href="{{ url_for('add_ticket') }}">Add ticket</a>
+            {% if session['isadmin'] == True %}
+              <a class="dropdown-item" href="{{ url_for('add_ticket') }}">Add ticket</a>
+            {% endif %}
             <a class="dropdown-item" href="{{ url_for('list_ticket_stats') }}">Ticket summary</a>
           </div>
         </li>

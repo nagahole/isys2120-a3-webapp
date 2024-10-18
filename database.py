@@ -154,7 +154,7 @@ def add_ticket_insert(
     # Data validation checks are assumed to have been done in route processing
 
     sql = """
-        INSERT into Ticket(TicketID, FlightID, PassengerID, TicketNumber, BookingDate, SeatNumber, Class, Price)
+        INSERT INTO Tickets(TicketID, FlightID, PassengerID, TicketNumber, BookingDate, SeatNumber, Class, Price)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s);
     """
 
@@ -420,7 +420,7 @@ def database_connect() -> Optional[pg8000.Connection]:
 
 
 def list_table_equifilter(table: str, attribute: str,
-                          filter_val: str) -> Optional[SqlResult]:
+                          filter_val: any) -> Optional[SqlResult]:
     """
     Get all rows in a table where a particular attribute matches a value
     """
@@ -428,7 +428,7 @@ def list_table_equifilter(table: str, attribute: str,
 
 
 def search_table_equifilter(table: str, attribute: str, filter_type: str,
-                            filter_val: str) -> Optional[SqlResult]:
+                            filter_val: any) -> Optional[SqlResult]:
     """
     Search for a table with a custom filter
 
@@ -450,10 +450,17 @@ def search_table_equifilter(table: str, attribute: str, filter_type: str,
         prefix = "'%"
         suffix = "%'"
 
+    if isinstance(filter_val, str):
+        placeholder = "lower(%s)"
+        attr_val = f"lower({attribute})"
+    else:
+        placeholder = "%s"
+        attr_val = attribute
+
     sql = f"""
         SELECT *
             FROM {table}
-            WHERE lower({attribute}) {filter_type} {prefix}lower(%s){suffix}
+            WHERE {attr_val} {filter_type} {prefix}{placeholder}{suffix}
     """
 
     return execute_and_fetch(dict_fetchall, sql, (filter_val,))
