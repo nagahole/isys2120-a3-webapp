@@ -77,9 +77,9 @@ def database_connect() -> Optional[pg8000.Connection]:
 ###############################################################################
 
 
-def trace_fetch_err(err: Exception) -> None:
+def trace_fetch_err() -> None:
     traceback.print_exc()
-    print(f"Error Fetching from Database - {err}, {sys.exc_info()[0]}")
+    print(f"Error Fetching from Database - {sys.exc_info()[0]}")
 
 
 def dict_fetchall(cursor: pg8000.Cursor, sql: str,
@@ -175,9 +175,9 @@ def check_login(username: str, password: str) -> Optional[SqlResult]:
 
     try:
         sql_res = dict_fetchone(cursor, sql, (username, password))
-    except Exception as e:
+    except Exception as _:
         traceback.print_exc()
-        print(f"Error Invalid Login - {e}")
+        print(f"Error Invalid Login")
 
     cursor.close()
     conn.close()
@@ -208,8 +208,8 @@ def list_users() -> Optional[SqlResult]:
     try:
         users_dict = dict_fetchall(cursor, sql)
         print(users_dict)
-    except Exception as e:
-        trace_fetch_err(e)
+    except Exception as _:
+        trace_fetch_err()
 
     cursor.close()
     conn.close()
@@ -235,8 +235,8 @@ def list_userroles() -> Optional[SqlResult]:
     try:
         user_roles_dict = dict_fetchall(cursor, sql)
         print(user_roles_dict)
-    except Exception as e:
-        trace_fetch_err(e)
+    except Exception as _:
+        trace_fetch_err()
 
     cursor.close()
     conn.close()
@@ -275,8 +275,8 @@ def list_consolidated_users() -> Optional[SqlResult]:
     try:
         sql_res = dict_fetchall(cursor, sql)
         print(sql_res)
-    except Exception as e:
-        trace_fetch_err(e)
+    except Exception as _:
+        trace_fetch_err()
 
     cursor.close()
     conn.close()
@@ -305,8 +305,8 @@ def list_user_stats() -> Optional[SqlResult]:
     try:
         sql_res = dict_fetchall(cursor, sql)
         print(sql_res)
-    except Exception as e:
-        trace_fetch_err(e)
+    except Exception as _:
+        trace_fetch_err()
 
     cursor.close()
     conn.close()
@@ -319,13 +319,13 @@ VALID_FILTERS: set[str] = {"=", "<", ">", "<>", "~", "LIKE"}
 
 def valid_users_attribute(attribute: str) -> bool:
 
-    if len(USERS_ATTRIBUTES) == 0 and not __fetch_user_atributes():
+    if len(USERS_ATTRIBUTES) == 0 and not fetch_user_attributes():
         return False
 
     return attribute in USERS_ATTRIBUTES
 
 
-def __fetch_user_atributes() -> bool:
+def fetch_user_attributes() -> bool:
 
     conn = database_connect()
 
@@ -334,24 +334,31 @@ def __fetch_user_atributes() -> bool:
 
     cursor = conn.cursor()
 
-    columns = None
+    sql = """
+        SELECT *
+            FROM Users
+            WHERE 1 = 0
+    """
 
     try:
-        cursor.execute("DESCRIBE Users")
-        columns = cursor.fetchall()
-    except Exception as e:
-        trace_fetch_err(e)
+        cursor.execute(sql)
+        description = cursor.description
+    except Exception as _:
+        trace_fetch_err()
+        return False
+
+    print("columns:", )
 
     conn.close()
     cursor.close()
 
-    if columns is None:
+    if description is None:
         return False
 
     USERS_ATTRIBUTES.clear()
 
-    for column in columns:
-        USERS_ATTRIBUTES.add(column[0])
+    for col in description:
+        USERS_ATTRIBUTES.add(col[0])
 
     return True
 
@@ -395,9 +402,9 @@ def search_users_customfilter(attribute: str, filter_type: str,
 
     try:
         print_sql_string(sql, (filter_val,))
-        sql_res = dict_fetchall(cursor, sql, (filter_val,))
-    except Exception as e:
-        trace_fetch_err(e)
+        sql_res = dict_fetchall(cursor, sql, (filter_val,)) or []
+    except Exception as _:
+        trace_fetch_err()
 
     cursor.close()
     conn.close()
@@ -466,8 +473,8 @@ def update_single_user(user_id: str, first_name: str,
         sql_res = dict_fetchone(cursor, sql, params)
 
         conn.commit()
-    except Exception as e:
-        trace_fetch_err(e)
+    except Exception as _:
+        trace_fetch_err()
 
     cursor.close()
     conn.close()
@@ -476,7 +483,7 @@ def update_single_user(user_id: str, first_name: str,
 
 
 def add_user_insert(user_id: str, first_name: str, last_name: str,
-                    user_role_id: str, password: str) -> Optional[SqlEntry]:
+                    user_role_id: int, password: str) -> Optional[SqlEntry]:
     """
     Add (inserts) a new User to the system
     """
@@ -508,8 +515,8 @@ def add_user_insert(user_id: str, first_name: str, last_name: str,
 
         print("return val is:")
         print(sql_res)
-    except Exception as e:
-        print(f"Unexpected error adding a user - {e}, {sys.exc_info()[0]}")
+    except Exception as _:
+        print(f"Unexpected error adding a user - {sys.exc_info()[0]}")
 
     cursor.close()
     conn.close()
@@ -532,7 +539,7 @@ def delete_user(userid: str) -> Optional[SqlEntry]:
     sql = """
         DELETE
             FROM Users
-            WHERE userid = '%s';
+            WHERE userid = %s;
     """
 
     sql_res = None
@@ -545,10 +552,10 @@ def delete_user(userid: str) -> Optional[SqlEntry]:
 
         print("return val is:")
         print(sql_res)
-    except Exception as e:
+    except Exception as _:
         print(
-            f"Unexpected error deleting user with id {userid}"
-            f" - {e}, {sys.exc_info()[0]}"
+            f"Unexpected error deleting user with id {userid} - " +
+            str(sys.exc_info()[0])
         )
 
     cursor.close()

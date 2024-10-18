@@ -6,6 +6,10 @@ import database
 from session import Session
 
 
+DATABASE_ERR_TEXT = \
+    "Error connecting to database - Invalid credentials in config?"
+
+
 # web-app setup
 page = {}
 session = Session()
@@ -80,42 +84,34 @@ def login():
     page["title"] = "Login"
     page["dbuser"] = db_user
 
-    if request.method == "POST":
-        print(request.form)
-
-        logins = database.check_login(
-            request.form["userid"],
-            request.form["password"]
-        )
-
-        print(logins)
-
-        # If our database connection gave back an error
-        if logins is None:
-            errortext = "Error with the database connection. "
-            errortext += "Please check your terminal " \
-                         "and make sure you updated your INI files."
-            flash(errortext)
-            return redirect(url_for("login"))
-
-        # If it's null, or nothing came up, flash a message saying error
-        # And make them go back to the login screen
-        if logins is None or len(logins) < 1:
-            flash("There was an error logging you in")
-            return redirect(url_for("login"))
-
-        # If it was successful, then we can log them in :)
-        print(logins[0])
-        session.name = logins[0]["firstname"]
-        session.userid = request.form["userid"]
-        session.logged_in = True
-        session.isadmin = logins[0]["isadmin"]
-        return redirect(url_for("index"))
-    else:
-        # Else, they"re just looking at the page :)
-        if session.get("logged_in", False) is True:
+    if request.method == "GET":
+        if session.logged_in:
             return redirect(url_for("index"))
         return render_template("index.html", page=page)
+
+    print(request.form)
+
+    login_response = database.check_login(
+        request.form["userid"],
+        request.form["password"]
+    )
+
+    print(login_response)
+
+    if login_response is None:  # database connection gave back error
+        flash(DATABASE_ERR_TEXT)
+        return redirect(url_for("login"))
+
+    if len(login_response) == 0:
+        flash("There was an error logging you in")
+        return redirect(url_for("login"))
+
+    print(login_response[0])
+    session.name = login_response[0]["firstname"]
+    session.userid = login_response[0]["userid"]
+    session.logged_in = True
+    session.isadmin = True  # TODO fix for submission login_response[0]["isadmin"]
+    return redirect(url_for("index"))
 
 
 @app.route("/logout")
@@ -227,11 +223,7 @@ def search_users_by_name():
         print(search)
 
         if search is None:
-            errortext = "Error with the database connection."
-            errortext += "Please check your terminal and " \
-                         "make sure you updated your INI files."
-            flash(errortext)
-
+            flash(DATABASE_ERR_TEXT)
             return redirect(url_for("index"))
 
         if len(search) == 0:
@@ -285,6 +277,7 @@ def delete_user(userid):
 
 
 USER_FORM_ATTRIBUTES = ("firstname", "lastname", "userroleid", "password")
+USER_FORM_ATTRIBUTE_TYPES = (str, str, int, str)
 
 
 def extract_from_form(form, default_values: tuple) -> tuple[dict, bool]:
@@ -294,12 +287,16 @@ def extract_from_form(form, default_values: tuple) -> tuple[dict, bool]:
 
     print("We have a value: ", user_dict["userid"])
 
-    for attr, default in zip(USER_FORM_ATTRIBUTES, default_values):
-        if attr in form:
+    for attr, typ, default in zip(
+        USER_FORM_ATTRIBUTES,
+        USER_FORM_ATTRIBUTE_TYPES,
+        default_values
+    ):
+        try:
+            user_dict[attr] = typ(form[attr])
             some_value_present = True
-            user_dict[attr] = form[attr]
             print("We have a value: ", user_dict[attr])
-        else:
+        except (ValueError, KeyError):
             user_dict[attr] = default
 
     return user_dict, some_value_present
@@ -316,7 +313,7 @@ def update_user():
 
     if not session.isadmin:
         flash("Only admins can update user details!")
-        return
+        return redirect(url_for("index"))
 
     page["title"] = "Update user details"
 
@@ -356,7 +353,7 @@ def edit_user(userid):
 
     if not session.isadmin:
         flash("Only admins can update user details!")
-        return
+        return redirect(url_for("index"))
 
     page["title"] = "Edit user details"
 
@@ -386,7 +383,7 @@ def add_user():
 
     if not session.isadmin:
         flash("Only admins can add users!")
-        return
+        return redirect(url_for("index"))
 
     page["title"] = "Add user details"
 
@@ -420,6 +417,4 @@ def add_user():
                              user_dict["userroleid"],
                              user_dict["password"])
 
-    # TODO Should redirect to your newly updated user
-    print("did it go wrong here?")
-    return redirect(url_for("list_consolidated_users"))
+    return list_single_users(user_dict["userid"])
