@@ -42,6 +42,79 @@ def list_tickets() -> Optional[SqlResult]:
     return execute_and_fetch(dict_fetchall, sql)
 
 
+def list_ticket_stats() -> Optional[SqlResult]:
+
+    sql = """
+        SELECT class, COUNT(TicketID) as count
+            FROM Tickets 
+            GROUP BY Class
+            ORDER BY Class ASC;
+    """
+
+    return execute_and_fetch(dict_fetchall, sql)
+
+
+def update_single_ticket(
+    ticket_id: int,
+    flight_id: int,
+    passenger_id: int,
+    ticket_number: str,
+    booking_date: str,
+    seat_number: str,
+    ticket_class: str,
+    price: float
+) -> Optional[SqlResult]:
+    """
+    Updates a single value by primary key
+    """
+
+    # Data validation checks are assumed to have been done in route processing
+
+    sets = []
+    params = []
+
+    if flight_id is not None:
+        sets.append("flightid = %s::bigint\n")
+        params.append(flight_id)
+
+    if passenger_id is not None:
+        sets.append("passengerid = %s::bigint")
+        params.append(passenger_id)
+
+    if ticket_number is not None:
+        sets.append("ticketnumber = %s")
+        params.append(ticket_number)
+
+    if booking_date is not None:
+        sets.append("bookingdate = %s::timestamp")
+        params.append(booking_date)
+
+    if seat_number is not None:
+        sets.append("seatnumber = %s")
+        params.append(seat_number)
+
+    if ticket_class is not None:
+        sets.append("class = %s")
+        params.append(ticket_class)
+
+    if price is not None:
+        sets.append("price = %s::decimal(10,2)")
+        params.append(price)
+
+    set_query = ", ".join(sets)
+
+    # f-string is ok here as it's hardcoded (not based on user input) and safe
+    sql = f"""
+        UPDATE tickets
+            SET {set_query}
+            WHERE TicketID = %s;
+    """
+
+    params.append(ticket_id)
+
+    return execute_and_fetch(dict_fetchone, sql, tuple(params), commit=True)
+
+
 def delete_ticket(ticketid: int) -> Optional[SqlEntry]:
     """
     Remove a ticket from your system
@@ -60,6 +133,37 @@ def delete_ticket(ticketid: int) -> Optional[SqlEntry]:
         sql,
         (ticketid,),
         err_msg=f"Error deleting ticket with id {ticketid}",
+        commit=True
+    )
+
+
+def add_ticket_insert(
+    ticket_id: int,
+    flight_id: int,
+    passenger_id: int,
+    ticket_number: str,
+    booking_date: str,
+    seat_number: str,
+    ticket_class: str,
+    price: float
+) -> Optional[SqlEntry]:
+    """
+    Add (inserts) a new Ticket to the system
+    """
+
+    # Data validation checks are assumed to have been done in route processing
+
+    sql = """
+        INSERT into Ticket(TicketID, FlightID, PassengerID, TicketNumber, BookingDate, SeatNumber, Class, Price)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s);
+    """
+
+    return execute_and_fetch(
+        dict_fetchone,
+        sql,
+        (ticket_id, flight_id, passenger_id, ticket_number,
+         booking_date, seat_number, ticket_class, price),
+        err_msg="Unexpected error adding a ticket",
         commit=True
     )
 
@@ -164,22 +268,22 @@ def update_single_user(user_id: str, first_name: str,
     params = []
 
     if first_name is not None:
-        sets.append("firstname = %s\n")
+        sets.append("firstname = %s")
         params.append(first_name)
 
     if last_name is not None:
-        sets.append("lastname = %s\n")
+        sets.append("lastname = %s")
         params.append(last_name)
 
     if user_role_id is not None:
-        sets.append("userroleid = %s::bigint\n")
+        sets.append("userroleid = %s::bigint")
         params.append(user_role_id)
 
     if password is not None:
-        sets.append("password = %s\n")
+        sets.append("password = %s")
         params.append(password)
 
-    set_query = ",".join(sets)
+    set_query = ", ".join(sets)
 
     # f-string is ok here as it's hardcoded (not based on user input) and safe
     sql = f"""

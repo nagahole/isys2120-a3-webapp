@@ -44,7 +44,6 @@
           </a>
 
           <div class="dropdown-menu" aria-labelledby="navbarDropdownUsers">
-
             <a class="dropdown-item" href="{{ url_for('list_users') }}">List users</a>
             <a class="dropdown-item" href="{{ url_for('search_users') }}">User search</a>
             {% if session['isadmin'] == True %}
@@ -55,7 +54,6 @@
             <div class="dropdown-divider"></div>
 
             <a class="dropdown-item" href="{{ url_for('list_consolidated_users') }}">User Details (Advanced)</a>
-
           </div>
         </li>
 
@@ -71,12 +69,10 @@
           </a>
 
           <div class="dropdown-menu" aria-labelledby="navbarDropdownTickets">
-
             <a class="dropdown-item" href="{{ url_for('list_tickets') }}">List tickets</a>
-            <!-- vvv implement remove and update ticket here too vvv -->
-            <a class="dropdown-item" href="{{ url_for('search_tickets_byid') }}">Ticket search</a>
+            <a class="dropdown-item" href="{{ url_for('search_tickets') }}">Ticket search</a>
             <a class="dropdown-item" href="{{ url_for('add_ticket') }}">Add ticket</a>
-            <a class="dropdown-item" href="{{ url_for('ticket_summary') }}">Ticket summary</a>
+            <a class="dropdown-item" href="{{ url_for('list_ticket_stats') }}">Ticket summary</a>
           </div>
         </li>
 

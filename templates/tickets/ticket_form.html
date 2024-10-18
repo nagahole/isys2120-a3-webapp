@@ -4,7 +4,11 @@
 
         <h2 class="title"> Add Ticket </h2>
 
-        <form class="needs-validation" method="POST" action="{{url_for('add_ticket')}}" novalidate>
+        {% if add_mode %}
+            <form class="needs-validation" method="POST" action="{{ url_for('add_ticket') }}" novalidate>
+        {% else %}
+            <form class="needs-validation" method="POST" action="{{ url_for('update_ticket') }}" novalidate>
+        {% endif %}
 
             <div class="form-group">
                 <label for="ticketid">Ticket ID:</label>

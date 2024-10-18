@@ -78,39 +78,18 @@ def list_single_tickets(ticketid):
     )
 
 
-@app.route("/consolidated/tickets")
-def list_consolidated_tickets():
-    """
-    List all rows in tickets join ticketroles
-    """
-
-    tickets_ticketroles_listdict = database.list_consolidated_tickets()
-
-    if tickets_ticketroles_listdict is None:
-        tickets_ticketroles_listdict = []
-        flash("Error, there are no rows in tickets_ticketroles_listdict")
-
-    page["title"] = "List Contents of Tickets join Ticketroles"
-
-    return render_template(
-        "tickets/list_consolidated_tickets.html",
-        page=page, session=session, tickets=tickets_ticketroles_listdict
-    )
-
-
 @app.route("/ticket_stats")
 def list_ticket_stats():
     """
     List some ticket stats
     """
-    # connect to the database and call the relevant function
+
     ticket_stats = database.list_ticket_stats()
 
-    # Handle the null condition
     if ticket_stats is None:
-        # Create an empty list and show error message
         ticket_stats = []
         flash("Error, there are no rows in ticket_stats")
+
     page["title"] = "Ticket Stats"
     return render_template(
         "tickets/list_ticket_stats.html",
@@ -173,10 +152,10 @@ def delete_ticket(ticketid):
     else:
         page["title"] = f"Error deleting {ticketid}. Is it a valid ticketID?"
 
-    return redirect(url_for("list_consolidated_tickets"))
+    return redirect(url_for("list_tickets"))
+
 
 TICKET_FORM_ATTRIBUTES = (
-    "ticketid",
     "flightid",
     "passengerid",
     "ticketnumber",
@@ -189,7 +168,7 @@ TICKET_FORM_ATTRIBUTES = (
 TICKET_FORM_ATTRIBUTE_TYPES = (
     int,
     int,
-    int,
+    str,
     str,
     str,
     str,
@@ -252,11 +231,17 @@ def update_ticket():
         flash("No updated values for ticket with ticketid")
         return redirect(url_for("list_tickets"))
 
-    database.update_single_ticket(ticket_dict["ticketid"],
-                                ticket_dict["firstname"],
-                                ticket_dict["lastname"],
-                                ticket_dict["ticketroleid"],
-                                ticket_dict["password"])
+    response = database.update_single_ticket(ticket_dict["ticketid"],
+                                             ticket_dict["flightid"],
+                                             ticket_dict["passengerid"],
+                                             ticket_dict["ticketnumber"],
+                                             ticket_dict["bookingdate"],
+                                             ticket_dict["seatnumber"],
+                                             ticket_dict["class"],
+                                             ticket_dict["price"])
+
+    if response is None:
+        flash("Error updating ticket")
 
     return list_single_tickets(ticket_dict["ticketid"])
 
@@ -276,19 +261,21 @@ def edit_ticket(ticketid):
 
     page["title"] = "Edit ticket details"
 
-    tickets_list_dict = database.list_tickets_equifilter("ticketid", ticketid) or []
+    tickets_list_dict = database.list_table_equifilter(
+        "Tickets", "ticketid", ticketid
+    ) or []
 
     if len(tickets_list_dict) == 0:
         flash(f"Error: No tickets matching id '{ticketid}'")
-        return redirect(url_for("list_consolidated_tickets"))
+        return redirect(url_for("list_tickets"))
 
     ticket = tickets_list_dict[0]
 
-    return render_template("tickets/edit_ticket.html",
+    return render_template("tickets/ticket_form.html",
                            session=session,
                            page=page,
-                           ticketroles=database.list_ticketroles(),
-                           ticket=ticket)
+                           ticket=ticket,
+                           add_mode=True)
 
 
 @app.route("/tickets/add", methods=["POST", "GET"])
@@ -306,12 +293,10 @@ def add_ticket():
 
     page["title"] = "Add ticket details"
 
-    # Check your incoming parameters
     if request.method == "GET":
-        return render_template("tickets/add_ticket.html",
+        return render_template("tickets/ticket_form.html",
                                session=session,
-                               page=page,
-                               ticketroles=database.list_ticketroles())
+                               page=page)
 
     # else POST
 
@@ -322,19 +307,30 @@ def add_ticket():
         flash("Can not add ticket without a ticketid")
         return redirect(url_for("add_ticket"))
 
-    ticket_dict, _ = extract_from_user_form(
+    ticket_dict, _ = extract_from_ticket_form(
         request.form,
-        ("Empty firstname", "Empty lastname", 1, "blank")
+        (
+            0,
+            0,
+            "no_ticketno",
+            "1970-01-01 00:00:00",  # unix time
+            "nseat",
+            "noclass",
+            -1
+        )
     )
 
     print("Insert parameters are:")
     print(ticket_dict)
 
     response = database.add_ticket_insert(ticket_dict["ticketid"],
-                             ticket_dict["firstname"],
-                             ticket_dict["lastname"],
-                             ticket_dict["ticketroleid"],
-                             ticket_dict["password"])
+                                          ticket_dict["flightid"],
+                                          ticket_dict["passengerid"],
+                                          ticket_dict["ticketnumber"],
+                                          ticket_dict["bookingdate"],
+                                          ticket_dict["seatnumber"],
+                                          ticket_dict["class"],
+                                          ticket_dict["price"])
 
     if response is None:
         flash("Error adding ticket")
@@ -412,14 +408,13 @@ def list_user_stats():
     """
     List some user stats
     """
-    # connect to the database and call the relevant function
+
     user_stats = database.list_user_stats()
 
-    # Handle the null condition
     if user_stats is None:
-        # Create an empty list and show error message
         user_stats = []
         flash("Error, there are no rows in user_stats")
+
     page["title"] = "User Stats"
     return render_template(
         "users/list_user_stats.html",
@@ -541,11 +536,14 @@ def update_user():
         flash("No updated values for user with userid")
         return redirect(url_for("list_users"))
 
-    database.update_single_user(user_dict["userid"],
-                                user_dict["firstname"],
-                                user_dict["lastname"],
-                                user_dict["userroleid"],
-                                user_dict["password"])
+    response = database.update_single_user(user_dict["userid"],
+                                           user_dict["firstname"],
+                                           user_dict["lastname"],
+                                           user_dict["userroleid"],
+                                           user_dict["password"])
+
+    if response is None:
+        flash("Error updating user")
 
     return list_single_users(user_dict["userid"])
 
@@ -565,7 +563,9 @@ def edit_user(userid):
 
     page["title"] = "Edit user details"
 
-    users_list_dict = database.list_table_equifilter("userid", userid) or []
+    users_list_dict = database.list_table_equifilter(
+        "Users", "userid", userid
+    ) or []
 
     if len(users_list_dict) == 0:
         flash(f"Error: No users matching id '{userid}'")
@@ -620,10 +620,10 @@ def add_user():
     print(user_dict)
 
     response = database.add_user_insert(user_dict["userid"],
-                             user_dict["firstname"],
-                             user_dict["lastname"],
-                             user_dict["userroleid"],
-                             user_dict["password"])
+                                        user_dict["firstname"],
+                                        user_dict["lastname"],
+                                        user_dict["userroleid"],
+                                        user_dict["password"])
 
     if response is None:
         flash("Error adding user")
@@ -683,7 +683,7 @@ def login():
     session.name = login_response[0]["firstname"]
     session.userid = login_response[0]["userid"]
     session.logged_in = True
-    session.isadmin = True  # TODO fix for submission login_response[0]["isadmin"]
+    session.isadmin = True  # TODO login_response[0]["isadmin"]
     return redirect(url_for("index"))
 
 

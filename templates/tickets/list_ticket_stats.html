@@ -1,0 +1,23 @@
+{% include 'top.html' %}
+
+<div id="content" class="container my-4">
+    <h1 class="page-title">Ticket Statistics</h1>
+    <br/>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Class</th>
+                <th>Count</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in tickets %}
+            <tr>
+                <td>{{item['class']}}</td>
+                <td>{{item['count']}}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% include 'end.html' %}
