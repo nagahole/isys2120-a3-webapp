@@ -1,0 +1,62 @@
+{% include 'top.html' %}
+<div class="content">
+    <div class="container my-4">
+
+        <h2 class="title"> Add Ticket </h2>
+
+        <form class="needs-validation" method="POST" action="{{url_for('add_ticket')}}" novalidate>
+
+            <div class="form-group">
+                <label for="ticketid">Ticket ID:</label>
+                <input type="number" step="1" class="form-control" id="ticketid" name="ticketid" placeholder="Enter ticket ID here" required>
+                <div class="invalid-feedback">Please enter a Ticket ID.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="flightid">Flight ID:</label>
+                <input type="number" step="1" class="form-control" id="flightid" name="flightid" placeholder="Enter flight ID here" required>
+                <div class="invalid-feedback">Please enter a Flight ID.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="passengerid">Passenger ID:</label>
+                <input type="number" step="1" class="form-control" id="passengerid" name="passengerid" placeholder="Enter passenger ID here" required>
+                <div class="invalid-feedback">Please enter a Passenger ID.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="ticketnumber">Ticket Number:</label>
+                <input type="text" maxlength="15" class="form-control" id="ticketnumber" name="ticketnumber" placeholder="Enter ticket number here" required>
+                <div class="invalid-feedback">Please enter a Ticket Number.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="bookingdate">Booking Date:</label>
+                <input type="date" class="form-control" id="bookingdate" name="bookingdate" placeholder="Select booking date here" required>
+                <div class="invalid-feedback">Please select a Booking Date.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="seatnumber">Seat Number:</label>
+                <input type="text" maxlength="5" class="form-control" id="seatnumber" name="seatnumber" placeholder="Enter seat number here" required>
+                <div class="invalid-feedback">Please enter a Seat Number.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="class">Class:</label>
+                <input type="text" maxlength="10" class="form-control" id="class" name="class" placeholder="Enter class here" required>
+                <div class="invalid-feedback">Please enter a Class.</div>
+            </div>
+
+            <div class="form-group">
+                <label for="price">Price:</label>
+                <input type="number" step="0.01" class="form-control" id="price" name="price" placeholder="Enter price here" required>
+                <div class="invalid-feedback">Please enter a Price.</div>
+            </div>
+
+            <button class="btn btn-primary" type="submit">Add</button>
+        </form>
+
+    </div>
+</div>
+{% include 'end.html' %}

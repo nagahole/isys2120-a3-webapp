@@ -3,26 +3,269 @@
 import configparser
 import sys
 import traceback
-from typing import Optional
+from typing import Optional, Callable
 
 import pg8000
 
+from LowercaseDefaultDict import LowercaseDefaultDict
 
 SqlEntry = dict[str, any]
 SqlResult = list[SqlEntry]
 
-USERS_ATTRIBUTES = set()
+SqlFetcher = Callable[[pg8000.Cursor], any]
 
-"""
-Common Functions
 
- - database_connect()
- - dictfetchall(cursor,sql,params)
- - dictfetchone(cursor,sql,params)
- - print_sql_string(inputstring, params)
+table_attributes = LowercaseDefaultDict(set)
 
-"""
 
+###############################################################################
+# TICKET OPERATIONS                                                           #
+###############################################################################
+
+
+def list_tickets() -> Optional[SqlResult]:
+    """
+    Lists all tickets
+
+    Gets all the rows of Tickets table and returns them as a dict
+    """
+
+    # TODO pagination
+
+    sql = """
+        SELECT *
+            FROM Tickets
+            ORDER BY TicketID ASC
+            LIMIT 10
+    """
+
+    return execute_and_fetch(dict_fetchall, sql)
+
+
+def delete_ticket(ticketid: int) -> Optional[SqlEntry]:
+    """
+    Remove a ticket from your system
+    """
+
+    # Data validation checks are assumed to have been done in route processing
+
+    sql = """
+        DELETE
+            FROM Tickets
+            WHERE TicketID = %s;
+    """
+
+    return execute_and_fetch(
+        dict_fetchone,
+        sql,
+        (ticketid,),
+        err_msg=f"Error deleting ticket with id {ticketid}",
+        commit=True
+    )
+
+
+###############################################################################
+# USER OPERATIONS                                                             #
+###############################################################################
+
+def list_users() -> Optional[SqlResult]:
+    """
+    Lists all users
+
+    Gets all the rows of Users table and returns them as a dict
+    """
+
+    sql = """
+        SELECT Users.*, UserRoles.IsAdmin
+            FROM Users JOIN UserRoles USING (UserRoleID)
+    """
+
+    return execute_and_fetch(dict_fetchall, sql)
+
+
+def list_userroles() -> Optional[SqlResult]:
+
+    sql = """
+        SELECT *
+            FROM userroles
+    """
+
+    return execute_and_fetch(dict_fetchall, sql)
+
+
+def list_consolidated_users() -> Optional[SqlResult]:
+    """
+    A report with the details of Users, Userroles
+    """
+
+    sql = """
+        SELECT *
+            FROM Users 
+            JOIN userroles ON (users.userroleid = userroles.userroleid);
+    """
+
+    return execute_and_fetch(dict_fetchall, sql)
+
+
+def list_user_stats() -> Optional[SqlResult]:
+
+    sql = """
+        SELECT userroleid, COUNT(*) as count
+            FROM Users 
+            GROUP BY userroleid
+            ORDER BY userroleid ASC;
+    """
+
+    return execute_and_fetch(dict_fetchall, sql)
+
+
+VALID_FILTERS: set[str] = {"=", "<", ">", "<>", "~", "LIKE"}
+
+
+def valid_table_attribute(table: str, attribute: str) -> bool:
+
+    if len(table_attributes[table]) == 0 and not fetch_table_attributes(table):
+        return False
+
+    return attribute in table_attributes[table]
+
+
+def fetch_table_attributes(table: str) -> bool:
+
+    sql = f"""
+        SELECT *
+            FROM {table}
+            WHERE 1 = 0
+    """
+
+    description = execute_and_fetch(lambda c: c.description, sql)
+
+    if description is None:
+        return False
+
+    table_attributes.clear()
+
+    for col in description:
+        table_attributes[table].add(col[0])
+
+    return True
+
+
+def update_single_user(user_id: str, first_name: str,
+                       last_name: str, user_role_id: str,
+                       password: str) -> Optional[SqlResult]:
+    """
+    Updates a single value by primary key
+    """
+
+    # Data validation checks are assumed to have been done in route processing
+
+    sets = []
+    params = []
+
+    if first_name is not None:
+        sets.append("firstname = %s\n")
+        params.append(first_name)
+
+    if last_name is not None:
+        sets.append("lastname = %s\n")
+        params.append(last_name)
+
+    if user_role_id is not None:
+        sets.append("userroleid = %s::bigint\n")
+        params.append(user_role_id)
+
+    if password is not None:
+        sets.append("password = %s\n")
+        params.append(password)
+
+    set_query = ",".join(sets)
+
+    # f-string is ok here as it's hardcoded (not based on user input) and safe
+    sql = f"""
+        UPDATE users
+            SET {set_query}
+            WHERE UserID = %s;
+    """
+
+    params.append(user_id)
+
+    return execute_and_fetch(dict_fetchone, sql, tuple(params), commit=True)
+
+
+def add_user_insert(user_id: str, first_name: str, last_name: str,
+                    user_role_id: int, password: str) -> Optional[SqlEntry]:
+    """
+    Add (inserts) a new User to the system
+    """
+
+    # Data validation checks are assumed to have been done in route processing
+
+    sql = """
+        INSERT into Users(UserID, FirstName, LastName, UserRoleID, Password)
+            VALUES (%s,%s,%s,%s,%s);
+    """
+
+    return execute_and_fetch(
+        dict_fetchone,
+        sql,
+        (user_id, first_name, last_name, user_role_id, password),
+        err_msg="Unexpected error adding a user",
+        commit=True
+    )
+
+
+def delete_user(userid: str) -> Optional[SqlEntry]:
+    """
+    Remove a user from your system
+    """
+
+    # Data validation checks are assumed to have been done in route processing
+
+    sql = """
+        DELETE
+            FROM Users
+            WHERE UserID = %s;
+    """
+
+    return execute_and_fetch(
+        dict_fetchone,
+        sql,
+        (userid,),
+        err_msg=f"Error deleting user with id {userid}",
+        commit=True
+    )
+
+
+###############################################################################
+# USER AUTH                                                                   #
+###############################################################################
+
+def check_login(username: str, password: str) -> Optional[SqlResult]:
+    """
+    Check Login given a username and password
+    """
+
+    print("checking login")
+
+    sql = """
+        SELECT *     
+            FROM Users
+            JOIN UserRoles ON (Users.userroleid = UserRoles.userroleid)
+            WHERE UserID = %s AND Password = %s
+    """
+
+    return execute_and_fetch(
+        dict_fetchone,
+        sql,
+        (username, password),
+        "Error Invalid Login"
+    )
+
+
+###############################################################################
+# DATABASE HELPER FUNCTIONS                                                   #
+###############################################################################
 
 def database_connect() -> Optional[pg8000.Connection]:
     """
@@ -72,9 +315,44 @@ def database_connect() -> Optional[pg8000.Connection]:
     return connection
 
 
-###############################################################################
-# DATABASE HELPER FUNCTIONS                                                   #
-###############################################################################
+def list_table_equifilter(table: str, attribute: str,
+                          filter_val: str) -> Optional[SqlResult]:
+    """
+    Get all rows in a table where a particular attribute matches a value
+    """
+    return search_table_equifilter(table, attribute, "=", filter_val)
+
+
+def search_table_equifilter(table: str, attribute: str, filter_type: str,
+                            filter_val: str) -> Optional[SqlResult]:
+    """
+    Search for a table with a custom filter
+
+    Useful for inexact matches
+
+    filter_type can be: '=', '<', '>', '<>', '~', 'LIKE'
+    """
+
+    if filter_type not in VALID_FILTERS:
+        return None
+
+    if not valid_table_attribute(table, attribute):
+        return None
+
+    prefix = ""
+    suffix = ""
+
+    if filter_type.lower() == "like":
+        prefix = "'%"
+        suffix = "%'"
+
+    sql = f"""
+        SELECT *
+            FROM {table}
+            WHERE lower({attribute}) {filter_type} {prefix}lower(%s){suffix}
+    """
+
+    return execute_and_fetch(dict_fetchall, sql, (filter_val,))
 
 
 def trace_fetch_err() -> None:
@@ -82,15 +360,12 @@ def trace_fetch_err() -> None:
     print(f"Error Fetching from Database - {sys.exc_info()[0]}")
 
 
-def dict_fetchall(cursor: pg8000.Cursor, sql: str,
-                  params=()) -> Optional[SqlResult]:
+def dict_fetchall(cursor: pg8000.Cursor) -> Optional[SqlResult]:
     """
     Returns query results as list of dictionaries
 
     Useful for read queries that return 1 or more rows
     """
-
-    cursor.execute(sql, params)
 
     if cursor.description is None:
         return None
@@ -109,8 +384,7 @@ def dict_fetchall(cursor: pg8000.Cursor, sql: str,
     return result
 
 
-def dict_fetchone(cursor: pg8000.Cursor,
-                  sql: str, params=()) -> SqlResult:
+def dict_fetchone(cursor: pg8000.Cursor) -> SqlResult:
     """
     Returns query results as list of dictionaries.
 
@@ -119,7 +393,6 @@ def dict_fetchone(cursor: pg8000.Cursor,
     """
 
     result = []
-    cursor.execute(sql, params)
 
     if cursor.description is not None:
 
@@ -136,6 +409,39 @@ def dict_fetchone(cursor: pg8000.Cursor,
     return result
 
 
+def execute_and_fetch(fetcher: SqlFetcher, sql: str, params=(),
+                      err_msg: Optional[str] = None,
+                      commit: bool = False) -> any:
+
+    conn = database_connect()
+
+    if conn is None:
+        return None
+
+    cursor = conn.cursor()
+
+    print_sql_string(sql, params)
+
+    sql_res = None
+
+    try:
+        cursor.execute(sql, params)
+        sql_res = fetcher(cursor)
+        print(sql_res)
+
+        if commit:
+            conn.commit()
+
+    except Exception as _:
+        traceback.print_exc()
+        if err_msg is not None:
+            print(err_msg)
+
+    cursor.close()
+    conn.close()
+    return sql_res
+
+
 def print_sql_string(sql: str, params=None) -> None:
     """
     Prints out a string as a SQL string parameterized
@@ -146,419 +452,3 @@ def print_sql_string(sql: str, params=None) -> None:
     """
 
     print(sql.replace("%s", "'%s'") % params)
-
-
-def check_login(username: str, password: str) -> Optional[SqlResult]:
-    """
-    Check Login given a username and password
-    """
-
-    print("checking login")
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        SELECT *     
-            FROM Users
-            JOIN UserRoles ON (Users.userroleid = UserRoles.userroleid)
-            WHERE userid = %s AND password = %s
-    """
-
-    print_sql_string(sql, (username, password))
-
-    sql_res = None
-
-    try:
-        sql_res = dict_fetchone(cursor, sql, (username, password))
-    except Exception as _:
-        traceback.print_exc()
-        print(f"Error Invalid Login")
-
-    cursor.close()
-    conn.close()
-    return sql_res
-
-
-def list_users() -> Optional[SqlResult]:
-    """
-    Lists all users
-
-    Gets all the rows of Users table and returns them as a dict
-    """
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        SELECT *
-            FROM Users
-    """
-
-    users_dict = None
-
-    try:
-        users_dict = dict_fetchall(cursor, sql)
-        print(users_dict)
-    except Exception as _:
-        trace_fetch_err()
-
-    cursor.close()
-    conn.close()
-
-    return users_dict
-
-
-def list_userroles() -> Optional[SqlResult]:
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-    user_roles_dict = None
-
-    sql = """
-        SELECT *
-            FROM userroles
-    """
-
-    try:
-        user_roles_dict = dict_fetchall(cursor, sql)
-        print(user_roles_dict)
-    except Exception as _:
-        trace_fetch_err()
-
-    cursor.close()
-    conn.close()
-
-    return user_roles_dict
-
-
-def list_users_equifilter(attribute: str,
-                          filter_val: str) -> Optional[SqlResult]:
-    """
-    Get all rows in users where a particular attribute matches a value
-    """
-    return search_users_customfilter(attribute, "=", filter_val)
-
-
-def list_consolidated_users() -> Optional[SqlResult]:
-    """
-    A report with the details of Users, Userroles
-    """
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        SELECT *
-            FROM Users 
-            JOIN userroles ON (users.userroleid = userroles.userroleid);
-    """
-
-    sql_res = None
-
-    try:
-        sql_res = dict_fetchall(cursor, sql)
-        print(sql_res)
-    except Exception as _:
-        trace_fetch_err()
-
-    cursor.close()
-    conn.close()
-
-    return sql_res
-
-
-def list_user_stats() -> Optional[SqlResult]:
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        SELECT userroleid, COUNT(*) as count
-            FROM Users 
-            GROUP BY userroleid
-            ORDER BY userroleid ASC;
-    """
-
-    sql_res = None
-
-    try:
-        sql_res = dict_fetchall(cursor, sql)
-        print(sql_res)
-    except Exception as _:
-        trace_fetch_err()
-
-    cursor.close()
-    conn.close()
-
-    return sql_res
-
-
-VALID_FILTERS: set[str] = {"=", "<", ">", "<>", "~", "LIKE"}
-
-
-def valid_users_attribute(attribute: str) -> bool:
-
-    if len(USERS_ATTRIBUTES) == 0 and not fetch_user_attributes():
-        return False
-
-    return attribute in USERS_ATTRIBUTES
-
-
-def fetch_user_attributes() -> bool:
-
-    conn = database_connect()
-
-    if conn is None:
-        return False
-
-    cursor = conn.cursor()
-
-    sql = """
-        SELECT *
-            FROM Users
-            WHERE 1 = 0
-    """
-
-    try:
-        cursor.execute(sql)
-        description = cursor.description
-    except Exception as _:
-        trace_fetch_err()
-        return False
-
-    print("columns:", )
-
-    conn.close()
-    cursor.close()
-
-    if description is None:
-        return False
-
-    USERS_ATTRIBUTES.clear()
-
-    for col in description:
-        USERS_ATTRIBUTES.add(col[0])
-
-    return True
-
-
-def search_users_customfilter(attribute: str, filter_type: str,
-                              filter_val: str) -> Optional[SqlResult]:
-    """
-    Search for users with a custom filter
-
-    Useful for inexact matches
-
-    filter_type can be: '=', '<', '>', '<>', '~', 'LIKE'
-    """
-
-    if filter_type not in VALID_FILTERS:
-        return None
-
-    if not valid_users_attribute(attribute):
-        return None
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-    sql_res = None
-
-    prefix = ""
-    suffix = ""
-
-    if filter_type.lower() == "like":
-        prefix = "'%"
-        suffix = "%'"
-
-    sql = f"""
-        SELECT *
-            FROM Users
-            WHERE lower({attribute}) {filter_type} {prefix}lower(%s){suffix}
-    """
-
-    try:
-        print_sql_string(sql, (filter_val,))
-        sql_res = dict_fetchall(cursor, sql, (filter_val,)) or []
-    except Exception as _:
-        trace_fetch_err()
-
-    cursor.close()
-    conn.close()
-
-    return sql_res
-
-
-def update_single_user(user_id: str, first_name: str,
-                       last_name: str, user_role_id: str,
-                       password: str) -> Optional[SqlResult]:
-    """
-    Updates a single value by primary key
-    """
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-    sql_res = None
-
-    # Data validation checks are assumed to have been done in route processing
-
-    set_query = ""
-    params = []
-
-    if first_name is not None:
-        set_query += "firstname = %s\n"
-        params.append(first_name)
-
-    if last_name is not None:
-        if len(params) > 0:
-            set_query += ","
-
-        set_query += "lastname = %s\n"
-        params.append(last_name)
-
-    if user_role_id is not None:
-        if len(params) > 0:
-            set_query += ","
-
-        set_query += "userroleid = %s::bigint\n"
-        params.append(user_role_id)
-
-    if password is not None:
-        if len(params) > 0:
-            set_query += ","
-
-        set_query += "password = %s\n"
-        params.append(password)
-
-    # f-string is ok here as it's hardcoded (not based on user input) and safe
-    sql = f"""
-        UPDATE users
-            SET {set_query}
-            WHERE userid = %s;
-    """
-
-    params.append(user_id)
-
-    try:
-        params = tuple(params)
-
-        print_sql_string(sql, params)
-        sql_res = dict_fetchone(cursor, sql, params)
-
-        conn.commit()
-    except Exception as _:
-        trace_fetch_err()
-
-    cursor.close()
-    conn.close()
-
-    return sql_res
-
-
-def add_user_insert(user_id: str, first_name: str, last_name: str,
-                    user_role_id: int, password: str) -> Optional[SqlEntry]:
-    """
-    Add (inserts) a new User to the system
-    """
-
-    # Data validation checks are assumed to have been done in route processing
-
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        INSERT into Users(userid, firstname, lastname, userroleid, password)
-            VALUES (%s,%s,%s,%s,%s);
-    """
-
-    params = (user_id, first_name, last_name, user_role_id, password)
-    print_sql_string(sql, params)
-
-    sql_res = None
-
-    try:
-        cursor.execute(sql, params)
-        conn.commit()
-
-        sql_res = cursor.fetchone()
-
-        print("return val is:")
-        print(sql_res)
-    except Exception as _:
-        print(f"Unexpected error adding a user - {sys.exc_info()[0]}")
-
-    cursor.close()
-    conn.close()
-
-    return sql_res
-
-
-def delete_user(userid: str) -> Optional[SqlEntry]:
-    """
-    Remove a user from your system
-    """
-    # Data validation checks are assumed to have been done in route processing
-    conn = database_connect()
-
-    if conn is None:
-        return None
-
-    cursor = conn.cursor()
-
-    sql = """
-        DELETE
-            FROM Users
-            WHERE userid = %s;
-    """
-
-    sql_res = None
-
-    try:
-        cursor.execute(sql, (userid,))
-        conn.commit()
-
-        sql_res = cursor.fetchone()
-
-        print("return val is:")
-        print(sql_res)
-    except Exception as _:
-        print(
-            f"Unexpected error deleting user with id {userid} - " +
-            str(sys.exc_info()[0])
-        )
-
-    cursor.close()
-    conn.close()
-
-    return sql_res

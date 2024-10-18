@@ -5,8 +5,9 @@
     <table class="table table-striped">
         <thead>
             <tr>
-               {% if session['isadmin'] == True %}
+                {% if session['isadmin'] == True %}
                 <th>Delete</th>
+                {% endif %}
                 <th>Userid</th>
                 <th>Firstname</th>
                 <th>Lastname</th>
@@ -15,17 +16,9 @@
                 <th>Rolename</th>
                 <th>Isadmin</th>
                 <th>Privilegeflags</th>
+                {% if session['isadmin'] == True %}
                 <th>Update</th>
-               {% else %}
-                <th>Userid</th>
-                <th>Firstname</th>
-                <th>Lastname</th>
-                <th>Userroleid</th>
-                <th>Password</th>
-                <th>Rolename</th>
-                <th>Isadmin</th>
-                <th>Privilegeflags</th>
-               {% endif %}
+                {% endif %}
             </tr>
         </thead>
         <tbody>

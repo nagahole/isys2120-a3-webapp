@@ -46,7 +46,7 @@
           <div class="dropdown-menu" aria-labelledby="navbarDropdownUsers">
 
             <a class="dropdown-item" href="{{ url_for('list_users') }}">List users</a>
-            <a class="dropdown-item" href="{{ url_for('search_users_by_name') }}">User search</a>
+            <a class="dropdown-item" href="{{ url_for('search_users') }}">User search</a>
             {% if session['isadmin'] == True %}
               <a class="dropdown-item" href="{{ url_for('add_user') }}">Add user</a>
             {% endif %}
