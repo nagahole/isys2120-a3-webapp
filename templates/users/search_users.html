@@ -6,11 +6,14 @@
 
 <form name="searchform" class="" method="POST" action="{{ url_for('search_users') }}">
     <div class="form-group">
-        <label>
-            Enter search field<br/>
-            <span class="small text-secondary">userid, firstname, lastname, userroleid</span>
-        </label>
-        <input class="form-control" type="text" name="searchfield" placeholder="Search Field" required>
+        <label>Search field</label>
+        <select class="form-control" id="searchfield" name="searchfield" required>
+            <option value="userid" selected>User ID</option>
+            <option value="firstname">First Name</option>
+            <option value="lastname">Last Name</option>
+            <option value="userroleid">User Role ID</option>
+        </select>
+        <div class="invalid-feedback">Please select a search field</div>
     </div>
 
     <div class="form-group">

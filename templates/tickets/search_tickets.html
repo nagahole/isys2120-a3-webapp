@@ -6,11 +6,18 @@
 
 <form name="searchform" method="POST" action="{{ url_for('search_tickets') }}">
     <div class="form-group">
-        <label>
-            Enter search field<br/>
-            <span class="small text-secondary">ticketid, flightid, passengerid, ticketnumber, bookingdate, seatnumber, class, price</span>
-        </label>
-        <input class="form-control" type="text" name="searchfield" placeholder="Search Field" required>
+        <label>Search field</label>
+        <select class="form-control" id="searchfield" name="searchfield" required>
+            <option value="ticketid" selected>Ticket ID</option>
+            <option value="flightid">Flight ID</option>
+            <option value="passengerid">Flight ID</option>
+            <option value="ticketnumber">Ticket Number</option>
+            <option value="bookingdate">Booking Date</option>
+            <option value="seatnumber">Seat Number</option>
+            <option value="class">Class</option>
+            <option value="price">Price</option>
+        </select>
+        <div class="invalid-feedback">Please select a search field</div>
     </div>
 
     <div class="form-group">
