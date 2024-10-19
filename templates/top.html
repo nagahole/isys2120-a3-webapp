@@ -47,7 +47,7 @@
           <div class="dropdown-menu" aria-labelledby="navbarDropdownUsers">
             <a class="dropdown-item" href="{{ url_for('list_users') }}">List users</a>
             <a class="dropdown-item" href="{{ url_for('search_users') }}">User search</a>
-            {% if session['isadmin'] == True %}
+            {% if session.isadmin == True %}
               <a class="dropdown-item" href="{{ url_for('add_user') }}">Add user</a>
             {% endif %}
             <a class="dropdown-item" href="{{ url_for('list_user_stats') }}">User stats</a>
@@ -72,7 +72,7 @@
           <div class="dropdown-menu" aria-labelledby="navbarDropdownTickets">
             <a class="dropdown-item" href="{{ url_for('list_tickets') }}">List tickets</a>
             <a class="dropdown-item" href="{{ url_for('search_tickets') }}">Ticket search</a>
-            {% if session['isadmin'] == True %}
+            {% if session.isadmin == True %}
               <a class="dropdown-item" href="{{ url_for('add_ticket') }}">Add ticket</a>
             {% endif %}
             <a class="dropdown-item" href="{{ url_for('list_ticket_stats') }}">Ticket summary</a>

@@ -1,19 +1,40 @@
 import configparser
-import math
 from datetime import datetime
 from typing import Optional
+from urllib.parse import quote
+from functools import wraps
 
 from flask import *
 
 import database
-from session import Session
+from src.session import Session
+from src.filters import Filters
+from src.pagination import Pagination
 
-# TODO pagination
-# - middle input to jump
-# - items per page
 # TODO columns sort
 # TODO search ranges
 
+TICKET_FORM_ATTRIBUTES: tuple[tuple[str, callable], ...] = (
+    ("ticketid", int),
+    ("flightid", int),
+    ("passengerid", int),
+    ("ticketnumber", str),
+    (
+        "bookingdate",
+        lambda s: datetime.strptime(s.strip(), "%Y-%m-%d %H:%M:%S")
+    ),
+    ("seatnumber", str),
+    ("class", str),
+    ("price", float)
+)
+
+USER_FORM_ATTRIBUTES: tuple[tuple[str, callable], ...] = (
+    ("userid", str),
+    ("firstname", str),
+    ("lastname", str),
+    ("userroleid", int),
+    ("password", str)
+)
 
 DATABASE_ERR_TEXT = "Error connecting to database"
 
@@ -41,13 +62,26 @@ if portchoice == "10000":
     exit(0)
 
 
+def require_login(func):
+
+    @wraps(func)
+    def decorated_function(*args, **kwargs):
+        if not session.logged_in:
+            return redirect(url_for("login"))
+        return func(*args, **kwargs)
+
+    return decorated_function
+
+
 ###############################################################################
 # ROUTES                                                                      #
 ###############################################################################
 
 # == TICKETS ==================================================================
 
+
 @app.route("/tickets")
+@require_login
 def list_tickets():
     page_no = request.args.get("page", 1, type=int)
     total_tickets = database.tickets_count()
@@ -62,17 +96,11 @@ def list_tickets():
         tickets_listdict = []
         flash("Error fetching tickets")
 
-    num_pages = math.ceil(total_tickets / database.TICKETS_PER_PAGE)
-
-    pagination = {
-        "page": page_no,
-        "per_page": database.TICKETS_PER_PAGE,
-        "total": total_tickets,
-        "pages": num_pages,
-        "has_prev": page_no > 1,
-        "has_next": page_no < num_pages,
-        "max_jump": 5
-    }
+    pagination = Pagination(
+        page_no,
+        database.TICKETS_PER_PAGE,
+        total_tickets
+    )
 
     page["title"] = "List Contents of Tickets"
     return render_template(
@@ -80,11 +108,14 @@ def list_tickets():
         page=page,
         session=session,
         tickets=tickets_listdict,
-        pagination=pagination
+        pagination=pagination,
+        route="list_tickets",
+        params={}
     )
 
 
 @app.route("/tickets/<ticketid>")
+@require_login
 def list_single_tickets(ticketid):
     """
     List all rows in tickets that match the specified ticketid
@@ -96,8 +127,8 @@ def list_single_tickets(ticketid):
         flash("TicketID must be an integer")
         return redirect(url_for("list_tickets"))
 
-    tickets_listdict = database.list_table_equifilter(
-        "Tickets", "ticketid", ticketid
+    tickets_listdict = database.search_table_by_filter(
+        "Tickets", "ticketid", Filters.EQUALS, ticketid
     ) or []
 
     if len(tickets_listdict) == 0:
@@ -106,14 +137,27 @@ def list_single_tickets(ticketid):
             f"'ticketid' for the value {ticketid}"
         )
 
+    pagination = Pagination(
+        1,
+        1,
+        1,
+        0
+    )
+
     page["title"] = "List Single ticketid for tickets"
     return render_template(
         "tickets/list_tickets.html",
-        page=page, session=session, tickets=tickets_listdict
+        page=page,
+        session=session,
+        tickets=tickets_listdict,
+        pagination=pagination,
+        route="list_single_tickets",
+        params={"ticketid": quote(str(ticketid))}
     )
 
 
 @app.route("/ticket_stats")
+@require_login
 def list_ticket_stats():
     """
     List some ticket stats
@@ -133,6 +177,7 @@ def list_ticket_stats():
 
 
 @app.route("/tickets/search", methods=["POST", "GET"])
+@require_login
 def search_tickets():
     """
     List all rows in tickets that match a particular name
@@ -146,50 +191,116 @@ def search_tickets():
     # else POST
 
     attribute = request.form["searchfield"].lower()
-    search = request.form["searchterm"].lower()
+    search = request.form["searchterm"]
 
-    if attribute != "ticketid" and attribute not in TICKET_FORM_ATTRIBUTES:
-        flash(f"Search field {attribute} doesn't exist")
-        return redirect(url_for("search_tickets"))
+    return redirect(
+        url_for(
+            "search_tickets_result",
+            page=1,
+            attribute=quote(attribute),
+            search=quote(search)
+        )
+    )
 
-    typ = int if attribute == "ticketid" else TICKET_FORM_ATTRIBUTES[attribute]
+
+@app.route("/tickets/searched", methods=["GET"])
+@require_login
+def search_tickets_result():
+
+    page_no = request.args.get("page", 1, type=int)
+    attribute = request.args.get("attribute", "", type=str)
+    search = request.args.get("search", "", type=str)
+
+    print(f"search {attribute} by {search}. page {page_no}")
 
     try:
-        search = typ(search)
+        parser = next(
+            filter(lambda tup: attribute == tup[0], TICKET_FORM_ATTRIBUTES)
+        )[1]
+    except StopIteration:  # attribute not in TICKET_FORM_ATTRIBUTES
+        flash(f"Search field '{attribute}' doesn't exist")
+        return redirect(url_for("search_tickets"))
+
+    try:
+        parsed_search = parser(search)
     except ValueError:
         flash(f"Search field in wrong form")
         return redirect(url_for("search_tickets"))
 
-    tickets_listdict = database.search_table_equifilter(
+    search_filter = Filters.LIKE if \
+        isinstance(parsed_search, str) else Filters.EQUALS
+
+    count_listdict = database.select_from_table_by_filter(
+        "Count(TicketID) AS count",
         "Tickets",
         attribute,
-        "~" if isinstance(search, str) else "=",
-        search
+        search_filter,
+        parsed_search
     )
 
+    if count_listdict is None:
+        flash(DATABASE_ERR_TEXT)
+        return redirect(url_for("index"))
+
+    matching_tickets = count_listdict[0]["count"]
+
+    if matching_tickets == 0:
+        flash(
+            f"No items found for search "
+            f"{attribute}: {parsed_search}"
+        )
+
+        return redirect(url_for("index"))
+
+    pagination = Pagination(
+        page_no,
+        database.TICKETS_PER_PAGE,
+        matching_tickets
+    )
+
+    if page_no != pagination.page:
+        return redirect(
+            url_for(
+                "search_tickets_result",
+                page=pagination.page,
+                attribute=quote(attribute),
+                search=quote(search)
+            )
+        )
+
+    page_no = pagination.page
+
+    tickets_listdict = database.search_table_by_filter(
+        "Tickets",
+        attribute,
+        search_filter,
+        parsed_search,
+        limit=database.TICKETS_PER_PAGE,
+        offset=(page_no - 1) * database.TICKETS_PER_PAGE
+    )
+
+    print(count_listdict)
     print(tickets_listdict)
 
     if tickets_listdict is None:
         flash(DATABASE_ERR_TEXT)
         return redirect(url_for("index"))
 
-    if len(tickets_listdict) == 0:
-        flash(
-            f"No items found for search "
-            f"{request.form['searchfield']}: {request.form['searchterm']}"
-        )
-
-        return redirect(url_for("index"))
-
-    page["title"] = f"Tickets search {attribute}"
+    page["title"] = f"Tickets search by {attribute}"
 
     return render_template(
         "tickets/list_tickets.html",
-        page=page, session=session, tickets=tickets_listdict
+        page=page,
+        session=session,
+        tickets=tickets_listdict,
+        pagination=pagination,
+        route="search_tickets_result",
+        params={"attribute": quote(attribute), "search": quote(search)}
     )
 
 
 @app.route("/tickets/delete/<ticketid>")
+@require_login
 def delete_ticket(ticketid):
     """
     Delete a ticket
@@ -215,17 +326,6 @@ def delete_ticket(ticketid):
     return redirect(url_for("list_tickets"))
 
 
-TICKET_FORM_ATTRIBUTES = {
-    "flightid": int,
-    "passengerid": int,
-    "ticketnumber": str,
-    "bookingdate": lambda s: datetime.strptime(s.strip(), "%Y-%m-%d %H:%M:%S"),
-    "seatnumber": str,
-    "class": str,
-    "price": float
-}
-
-
 def extract_from_ticket_form(form, default_values: tuple) \
         -> Optional[tuple[dict, bool]]:
 
@@ -239,12 +339,16 @@ def extract_from_ticket_form(form, default_values: tuple) \
 
     print("We have a value: ", ticket_dict["ticketid"])
 
-    for (attr, typ), default in zip(
-        TICKET_FORM_ATTRIBUTES.items(),
+    for (attr, parser), default in zip(
+        TICKET_FORM_ATTRIBUTES,
         default_values
     ):
+
+        if attr == "ticketid":
+            continue
+
         try:
-            ticket_dict[attr] = typ(form[attr])
+            ticket_dict[attr] = parser(form[attr])
             some_value_present = True
             print("We have a value: ", ticket_dict[attr])
         except (ValueError, KeyError):
@@ -254,13 +358,11 @@ def extract_from_ticket_form(form, default_values: tuple) \
 
 
 @app.route("/tickets/update", methods=["POST"])
+@require_login
 def update_ticket():
     """
     Update details for a ticket
     """
-
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     if not session.isadmin:
         flash("Only admins can update ticket details!")
@@ -276,7 +378,7 @@ def update_ticket():
         return redirect(url_for("list_tickets"))
 
     ticket_dict, valid_update = extract_from_ticket_form(
-        request.form, (None,) * 7
+        request.form, (None,) * 8
     )
 
     print("Update dict is:")
@@ -302,13 +404,11 @@ def update_ticket():
 
 
 @app.route("/tickets/edit/<ticketid>", methods=["GET"])
+@require_login
 def edit_ticket(ticketid):
     """
     Edit a ticket
     """
-
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     if not session.isadmin:
         flash("Only admins can update ticket details!")
@@ -322,8 +422,8 @@ def edit_ticket(ticketid):
 
     page["title"] = "Edit ticket details"
 
-    tickets_list_dict = database.list_table_equifilter(
-        "Tickets", "ticketid", ticketid
+    tickets_list_dict = database.search_table_by_filter(
+        "Tickets", "ticketid", Filters.EQUALS, ticketid
     ) or []
 
     if len(tickets_list_dict) == 0:
@@ -341,13 +441,11 @@ def edit_ticket(ticketid):
 
 
 @app.route("/tickets/add", methods=["POST", "GET"])
+@require_login
 def add_ticket():
     """
     Add a new Ticket
     """
-
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     if not session.isadmin:
         flash("Only admins can add tickets!")
@@ -372,6 +470,7 @@ def add_ticket():
     extraction = extract_from_ticket_form(
         request.form,
         (
+            None,
             0,
             0,
             "no_ticketno",
@@ -384,7 +483,7 @@ def add_ticket():
 
     if extraction is None:
         flash("Error adding ticket (invalid ticketid?)")
-        return redirect(url_for("index"))
+        return redirect(url_for("add_ticket"))
 
     ticket_dict, _ = extraction
 
@@ -402,7 +501,7 @@ def add_ticket():
 
     if response is None:
         flash("Error adding ticket")
-        return redirect(url_for("index"))
+        return redirect(url_for("add_ticket"))
 
     return list_single_tickets(ticket_dict["ticketid"])
 
@@ -410,6 +509,7 @@ def add_ticket():
 # == USERS ====================================================================
 
 @app.route("/users")
+@require_login
 def list_users():
     """
     List all rows in Users table
@@ -429,13 +529,14 @@ def list_users():
 
 
 @app.route("/users/<userid>")
+@require_login
 def list_single_users(userid):
     """
     List all rows in users that match the specified userid
     """
 
-    users_listdict = database.list_table_equifilter(
-        "Users", "userid", userid
+    users_listdict = database.search_table_by_filter(
+        "Users", "userid", Filters.EQUALS, userid
     ) or []
 
     if len(users_listdict) == 0:
@@ -452,6 +553,7 @@ def list_single_users(userid):
 
 
 @app.route("/consolidated/users")
+@require_login
 def list_consolidated_users():
     """
     List all rows in users join userroles
@@ -472,6 +574,7 @@ def list_consolidated_users():
 
 
 @app.route("/user_stats")
+@require_login
 def list_user_stats():
     """
     List some user stats
@@ -491,6 +594,7 @@ def list_user_stats():
 
 
 @app.route("/users/search", methods=["POST", "GET"])
+@require_login
 def search_users():
     """
     List all rows in users that match a particular name
@@ -503,10 +607,10 @@ def search_users():
 
     # else POST
 
-    users_listdict = database.search_table_equifilter(
+    users_listdict = database.search_table_by_filter(
         "Users",
         request.form["searchfield"],
-        "~",
+        Filters.LIKE,
         request.form["searchterm"]
     )
 
@@ -514,14 +618,14 @@ def search_users():
 
     if users_listdict is None:
         flash(DATABASE_ERR_TEXT)
-        return redirect(url_for("index"))
+        return redirect(url_for("search_users"))
 
     if len(users_listdict) == 0:
         flash(
             f"No items found for search "
             f"{request.form['searchfield']}: {request.form['searchterm']}"
         )
-        return redirect(url_for("index"))
+        return redirect(url_for("search_users"))
 
     page["title"] = "Users search"
 
@@ -532,6 +636,7 @@ def search_users():
 
 
 @app.route("/users/delete/<userid>")
+@require_login
 def delete_user(userid):
     """
     Delete a user
@@ -551,14 +656,6 @@ def delete_user(userid):
     return redirect(url_for("list_consolidated_users"))
 
 
-USER_FORM_ATTRIBUTES = {
-    "firstname": str,
-    "lastname": str,
-    "userroleid": int,
-    "password": str
-}
-
-
 def extract_from_user_form(form, default_values: tuple) -> tuple[dict, bool]:
 
     user_dict: dict[str, any] = {"userid": form["userid"]}
@@ -566,12 +663,15 @@ def extract_from_user_form(form, default_values: tuple) -> tuple[dict, bool]:
 
     print("We have a value: ", user_dict["userid"])
 
-    for (attr, typ), default in zip(
-        USER_FORM_ATTRIBUTES.items(),
+    for (attr, parser), default in zip(
+        USER_FORM_ATTRIBUTES,
         default_values
     ):
+        if attr == "userid":
+            continue
+
         try:
-            user_dict[attr] = typ(form[attr])
+            user_dict[attr] = parser(form[attr])
             some_value_present = True
             print("We have a value: ", user_dict[attr])
         except (ValueError, KeyError):
@@ -581,13 +681,11 @@ def extract_from_user_form(form, default_values: tuple) -> tuple[dict, bool]:
 
 
 @app.route("/users/update", methods=["POST"])
+@require_login
 def update_user():
     """
     Update details for a user
     """
-
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     if not session.isadmin:
         flash("Only admins can update user details!")
@@ -602,7 +700,7 @@ def update_user():
         flash("Can not update without a userid")
         return redirect(url_for("list_users"))
 
-    user_dict, valid_update = extract_from_user_form(request.form, (None,) * 4)
+    user_dict, valid_update = extract_from_user_form(request.form, (None,) * 5)
 
     print("Update dict is:")
     print(user_dict, valid_update)
@@ -624,13 +722,11 @@ def update_user():
 
 
 @app.route("/users/edit/<userid>", methods=["GET"])
+@require_login
 def edit_user(userid):
     """
     Edit a user
     """
-
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     if not session.isadmin:
         flash("Only admins can update user details!")
@@ -638,8 +734,8 @@ def edit_user(userid):
 
     page["title"] = "Edit user details"
 
-    users_list_dict = database.list_table_equifilter(
-        "Users", "userid", userid
+    users_list_dict = database.search_table_by_filter(
+        "Users", "userid", Filters.EQUALS, userid
     ) or []
 
     if len(users_list_dict) == 0:
@@ -656,13 +752,11 @@ def edit_user(userid):
 
 
 @app.route("/users/add", methods=["POST", "GET"])
+@require_login
 def add_user():
     """
     Add a new User
     """
-
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     if not session.isadmin:
         flash("Only admins can add users!")
@@ -688,7 +782,7 @@ def add_user():
 
     user_dict, _ = extract_from_user_form(
         request.form,
-        ("Empty firstname", "Empty lastname", 1, "blank")
+        (None, "Empty firstname", "Empty lastname", 1, "blank")
     )
 
     print("Insert parameters are:")
@@ -702,7 +796,7 @@ def add_user():
 
     if response is None:
         flash("Error adding user")
-        return redirect(url_for("index"))
+        return redirect(url_for("add_user"))
 
     return list_single_users(user_dict["userid"])
 
@@ -710,13 +804,11 @@ def add_user():
 # == INDEX ====================================================================
 
 @app.route("/")
+@require_login
 def index():
     """
     Index (home page)
     """
-    # If the user is not logged in, then make them go to the login page
-    if not session.logged_in:
-        return redirect(url_for("login"))
 
     page["username"] = db_user
     page["title"] = "Welcome"
@@ -758,7 +850,7 @@ def login():
     session.name = login_response[0]["firstname"]
     session.userid = login_response[0]["userid"]
     session.logged_in = True
-    session.isadmin = login_response[0]["isadmin"]
+    session.isadmin = True  # TODO login_response[0]["isadmin"]
     return redirect(url_for("index"))
 
 

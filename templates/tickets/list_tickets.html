@@ -3,13 +3,14 @@
 <div id="content" class="container my-4">
     <h1 class="page-title">{{page.get('title', 'Tickets')}}</h1>
 
+    {% if pagination.has_prev or pagination.has_next %}
     <!-- Pagination Controls -->
     <nav aria-label="Page navigation">
         <div class="d-flex flex-row justify-content-between">
 
             <!-- First Arrow -->
             <div class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('list_tickets', page=1) }}" aria-label="Previous">
+                <a class="page-link" href="{{ url_for(route, page=1, **params) }}" aria-label="Previous">
                     <span aria-hidden="true">&laquo;</span>
                 </a>
             </div>
@@ -23,7 +24,7 @@
                         {% for page_num in range(pagination.page - pagination.max_jump, pagination.page) %}
                             {% if page_num >= 1 %}
                             <li class="page-item" style="flex: 1;">
-                                <a class="page-link text-center" href="{{ url_for('list_tickets', page=page_num) }}">{{ page_num }}</a>
+                                <a class="page-link text-center" href="{{ url_for(route, page=page_num, **params) }}">{{ page_num }}</a>
                             </li>
                             {% else %}
                             <li class="page-item disabled" style="flex: 1;">
@@ -56,7 +57,7 @@
                         {% for page_num in range(pagination.page + 1, pagination.page + pagination.max_jump + 1) %}
                             {% if page_num <= pagination.pages %}
                             <li class="page-item text-center" style="flex: 1;">
-                                <a class="page-link" href="{{ url_for('list_tickets', page=page_num) }}">{{ page_num }}</a>
+                                <a class="page-link" href="{{ url_for(route, page=page_num, **params) }}">{{ page_num }}</a>
                             </li>
                             {% else %}
                             <li class="page-item text-center disabled" style="flex: 1;">
@@ -71,18 +72,19 @@
 
             <!-- Last Arrow -->
             <div class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('list_tickets', page=pagination.pages) }}" aria-label="Next">
+                <a class="page-link" href="{{ url_for(route, page=pagination.pages, **params) }}" aria-label="Next">
                     <span aria-hidden="true">&raquo;</span>
                 </a>
             </div>
 
         </div>
     </nav>
+    {% endif %}
 
     <table class="table table-striped">
         <thead>
             <tr>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                 <th>Delete</th>
                 {% endif %}
                 <th>TicketID</th>
@@ -93,7 +95,7 @@
                 <th>SeatNumber</th>
                 <th>Class</th>
                 <th>Price</th>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                 <th>Update</th>
                 {% endif %}
             </tr>
@@ -101,7 +103,7 @@
         <tbody>
         {% for item in tickets %}
             <tr class="align-items-center">
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                     <td>
                         <a href="{{ url_for('delete_ticket', ticketid=item.ticketid) }}" class="btn btn-danger">Delete</a>
                     </td>
@@ -114,7 +116,7 @@
                     <td class="align-middle">{{item['seatnumber']}}</td>
                     <td class="align-middle">{{item['class']}}</td>
                     <td class="align-middle">{{item['price']}}</td>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                     <td><a class="btn btn-primary" href="{{ url_for('edit_ticket', ticketid=item.ticketid) }}">Edit</a></td>
                 {% endif %}
             </tr>

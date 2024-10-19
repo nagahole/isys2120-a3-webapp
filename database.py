@@ -7,7 +7,8 @@ from typing import Optional, Callable
 
 import pg8000
 
-from LowercaseDefaultDict import LowercaseDefaultDict
+from src.filters import Filters
+from src.lowercase_default_dict import LowercaseDefaultDict
 
 
 # CONSTANTS
@@ -174,7 +175,8 @@ def add_ticket_insert(
     # Data validation checks are assumed to have been done in route processing
 
     sql = """
-        INSERT INTO Tickets(TicketID, FlightID, PassengerID, TicketNumber, BookingDate, SeatNumber, Class, Price)
+        INSERT INTO Tickets(TicketID, FlightID, PassengerID, TicketNumber, 
+                            BookingDate, SeatNumber, Class, Price)
             VALUES (%s,%s,%s,%s,%s,%s,%s,%s);
     """
 
@@ -241,9 +243,6 @@ def list_user_stats() -> Optional[SqlResult]:
     """
 
     return execute_and_fetch(dict_fetchall, sql)
-
-
-VALID_FILTERS: set[str] = {"=", "<", ">", "<>", "~", "LIKE"}
 
 
 def valid_table_attribute(table: str, attribute: str) -> bool:
@@ -439,16 +438,31 @@ def database_connect() -> Optional[pg8000.Connection]:
     return connection
 
 
-def list_table_equifilter(table: str, attribute: str,
-                          filter_val: any) -> Optional[SqlResult]:
-    """
-    Get all rows in a table where a particular attribute matches a value
-    """
-    return search_table_equifilter(table, attribute, "=", filter_val)
+def search_table_by_filter(table: str,
+                           attribute: str,
+                           filter_type: Filters,
+                           filter_val: any,
+                           limit: int = None,
+                           offset: int = None) -> Optional[SqlResult]:
+
+    return select_from_table_by_filter(
+        "*",
+        table,
+        attribute,
+        filter_type,
+        filter_val,
+        limit,
+        offset
+    )
 
 
-def search_table_equifilter(table: str, attribute: str, filter_type: str,
-                            filter_val: any) -> Optional[SqlResult]:
+def select_from_table_by_filter(select_operation: str,
+                                table: str,
+                                attribute: str,
+                                filter_type: Filters,
+                                filter_val: any,
+                                limit: int = None,
+                                offset: int = None) -> Optional[SqlResult]:
     """
     Search for a table with a custom filter
 
@@ -457,31 +471,32 @@ def search_table_equifilter(table: str, attribute: str, filter_type: str,
     filter_type can be: '=', '<', '>', '<>', '~', 'LIKE'
     """
 
-    if filter_type not in VALID_FILTERS:
-        return None
-
     if not valid_table_attribute(table, attribute):
         return None
 
-    prefix = ""
-    suffix = ""
-
-    if filter_type.lower() == "like":
-        prefix = "'%"
-        suffix = "%'"
-
     if isinstance(filter_val, str):
-        placeholder = "lower(%s)"
         attr_val = f"lower({attribute})"
+
+        if filter_type == Filters.LIKE:
+            filter_val = f"%{filter_val.lower()}%"
+        else:
+            filter_val = filter_val.lower()
     else:
-        placeholder = "%s"
         attr_val = attribute
 
     sql = f"""
-        SELECT *
+        SELECT {select_operation}
             FROM {table}
-            WHERE {attr_val} {filter_type} {prefix}{placeholder}{suffix}
+            WHERE {attr_val} {filter_type.value} %s
     """
+
+    if limit is not None:
+        sql += f" LIMIT {limit}"
+
+    if offset is not None:
+        sql += f" OFFSET {offset}"
+
+    print(sql)
 
     return execute_and_fetch(dict_fetchall, sql, (filter_val,))
 
@@ -582,4 +597,4 @@ def print_sql_string(sql: str, params=None) -> None:
     Useful for checking how it would insert
     """
 
-    print(sql.replace("%s", "'%s'") % params)
+    print(sql.replace("%s", "'{}'").format(*params))

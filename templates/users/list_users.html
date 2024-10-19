@@ -5,7 +5,7 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                 <th>Delete</th>
                 {% endif %}
                 <th>Userid</th>
@@ -13,7 +13,7 @@
                 <th>Lastname</th>
                 <th>Userroleid</th>
                 <th>Password</th>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                 <th>Update</th>
                 {% endif %}
             </tr>
@@ -21,7 +21,7 @@
         <tbody>
         {% for item in users %}
             <tr class="align-items-center">
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                     <td>
                         {% if item['isadmin'] == True %}
                             <button onclick="alert('This would delete user {{ item['userid'] }} by calling {{ url_for('delete_user', userid=item.userid) }}')" class="btn btn-danger">Delete</button>

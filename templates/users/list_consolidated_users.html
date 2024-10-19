@@ -5,7 +5,7 @@
     <table class="table table-striped">
         <thead>
             <tr>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                 <th>Delete</th>
                 {% endif %}
                 <th>Userid</th>
@@ -16,7 +16,7 @@
                 <th>Rolename</th>
                 <th>Isadmin</th>
                 <th>Privilegeflags</th>
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                 <th>Update</th>
                 {% endif %}
             </tr>
@@ -24,7 +24,7 @@
         <tbody>
         {% for item in users %}
             <tr class="align-items-center">
-                {% if session['isadmin'] == True %}
+                {% if session.isadmin == True %}
                     <td>
                         {% if item['isadmin'] == True %}
                             <button disabled class="btn btn-danger" onclick="alert('Even an Admin should not delete an admin')">Delete</button>
