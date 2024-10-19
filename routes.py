@@ -11,8 +11,7 @@ from src.session import Session
 from src.filters import Filters
 from src.pagination import Pagination
 
-# TODO columns sort
-# TODO search ranges
+# TODO dropdown
 
 TICKET_FORM_ATTRIBUTES: tuple[tuple[str, callable], ...] = (
     ("ticketid", int),
@@ -512,7 +511,7 @@ def add_ticket():
             "1970-01-01 00:00:00",  # unix time
             "nseat",
             "noclass",
-            -1
+            0
         )
     )
 

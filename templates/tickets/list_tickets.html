@@ -90,80 +90,96 @@
                 <th>
                     <a href="{{ url_for(route, togglesort='ticketid', **params) }}">
                         TicketID
-                        {% if sort == 'ticketid' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'ticketid' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='flightid', **params) }}">
                         FlightID
-                        {% if sort == 'flightid' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'flightid' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='passengerid', **params) }}">
                         PassengerID
-                        {% if sort == 'passengerid' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'passengerid' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='ticketnumber', **params) }}">
                         TicketNumber
-                        {% if sort == 'ticketnumber' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'ticketnumber' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='bookingdate', **params) }}">
                         BookingDate
-                        {% if sort == 'bookingdate' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'bookingdate' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='seatnumber', **params) }}">
                         SeatNumber
-                        {% if sort == 'seatnumber' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'seatnumber' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='class', **params) }}">
                         Class
-                        {% if sort == 'class' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'class' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
                 <th>
                     <a href="{{ url_for(route, togglesort='price', **params) }}">
                         Price
-                        {% if sort == 'price' %}
-                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
-                        {% else %}
-                            <i class="fa fa-sort"></i>
+                        {% if params.sort == 'price' %}
+                            {% if params.direction == 'asc' %}
+                                ▲
+                            {% else %}
+                                ▼
+                            {% endif %}
                         {% endif %}
                     </a>
                 </th>
