@@ -23,7 +23,50 @@ SqlFetcher = Callable[[pg8000.Cursor], any]
 
 # GLOBAL VARIABLES
 
-table_attributes = LowercaseDefaultDict(set)
+table_attributes: dict[str, list[str]] = LowercaseDefaultDict(list)
+
+
+def validate_sort_params(table: str, sort_by: str,
+                         sort_dir: str) -> Optional[tuple[str, str]]:
+
+    if not isinstance(sort_by, str) or \
+            not valid_table_attribute(table, sort_by):
+        return None
+
+    if not isinstance(sort_dir, str) or \
+            sort_dir.lower() not in ("asc", "desc"):
+        sort_dir = "asc"
+
+    return sort_by.lower(), sort_dir.lower()
+
+
+def complete_order_by(table: str, sort_by: str, sort_dir: str) -> str:
+    """
+    Use all primary keys for order by for consistent results
+    """
+
+    print(sort_by, sort_dir)
+
+    attrs = get_table_attributes(table).copy()
+
+    if len(attrs) == 0:  # invalid table?
+        return ""
+
+    sort_params = validate_sort_params(table, sort_by, sort_dir)
+
+    if sort_params is not None:
+        sort_by, sort_dir = sort_params
+    else:
+        sort_by = attrs[0]
+        sort_dir = "asc"
+
+    if sort_by in attrs:
+        attrs.remove(sort_by)
+
+    criterion = [f"{sort_by} {sort_dir.upper()}"] + \
+                [f"{k} ASC" for k in attrs]
+
+    return "ORDER BY " + ", ".join(criterion)
 
 
 ###############################################################################
@@ -45,7 +88,8 @@ def tickets_count() -> Optional[int]:
     return response[0]["count"]
 
 
-def list_tickets(page: int) -> Optional[SqlResult]:
+def list_tickets(page: int, sort_by: str,
+                 sort_dir: str) -> Optional[SqlResult]:
     """
     Lists all tickets
 
@@ -55,7 +99,7 @@ def list_tickets(page: int) -> Optional[SqlResult]:
     sql = f"""
         SELECT *
             FROM Tickets
-            ORDER BY TicketID ASC
+            {complete_order_by('Tickets', sort_by, sort_dir)}
             LIMIT {TICKETS_PER_PAGE}
             OFFSET {(page - 1) * TICKETS_PER_PAGE}
     """
@@ -246,11 +290,15 @@ def list_user_stats() -> Optional[SqlResult]:
 
 
 def valid_table_attribute(table: str, attribute: str) -> bool:
+    return attribute.lower() in get_table_attributes(table)
 
-    if len(table_attributes[table]) == 0 and not fetch_table_attributes(table):
-        return False
 
-    return attribute in table_attributes[table]
+def get_table_attributes(table: str) -> list[str]:
+
+    if len(table_attributes[table]) == 0:
+        fetch_table_attributes(table)
+
+    return table_attributes[table]
 
 
 def fetch_table_attributes(table: str) -> bool:
@@ -266,10 +314,7 @@ def fetch_table_attributes(table: str) -> bool:
     if description is None:
         return False
 
-    table_attributes.clear()
-
-    for col in description:
-        table_attributes[table].add(col[0])
+    table_attributes[table] = list(map(lambda c: c[0].lower(), description))
 
     return True
 
@@ -443,7 +488,9 @@ def search_table_by_filter(table: str,
                            filter_type: Filters,
                            filter_val: any,
                            limit: int = None,
-                           offset: int = None) -> Optional[SqlResult]:
+                           offset: int = None,
+                           sort_by: str = None,
+                           sort_dir: str = None) -> Optional[SqlResult]:
 
     return select_from_table_by_filter(
         "*",
@@ -452,17 +499,25 @@ def search_table_by_filter(table: str,
         filter_type,
         filter_val,
         limit,
-        offset
+        offset,
+        sort_by,
+        sort_dir,
+        complete_sort=True
     )
 
 
-def select_from_table_by_filter(select_operation: str,
-                                table: str,
-                                attribute: str,
-                                filter_type: Filters,
-                                filter_val: any,
-                                limit: int = None,
-                                offset: int = None) -> Optional[SqlResult]:
+def select_from_table_by_filter(
+    select_operation: str,
+    table: str,
+    attribute: str,
+    filter_type: Filters,
+    filter_val: any,
+    limit: int = None,
+    offset: int = None,
+    sort_by: str = None,
+    sort_dir: str = None,
+    complete_sort: bool = True
+) -> Optional[SqlResult]:
     """
     Search for a table with a custom filter
 
@@ -484,10 +539,20 @@ def select_from_table_by_filter(select_operation: str,
     else:
         attr_val = attribute
 
+    sort_params = validate_sort_params(table, sort_by, sort_dir)
+
+    if sort_params is None:
+        sort_query = ""
+    elif complete_sort:
+        sort_query = complete_order_by(table, sort_by, sort_dir)
+    else:
+        sort_query = f"ORDER BY {sort_by} {sort_dir}"
+
     sql = f"""
         SELECT {select_operation}
             FROM {table}
             WHERE {attr_val} {filter_type.value} %s
+            {sort_query}
     """
 
     if limit is not None:
@@ -526,7 +591,7 @@ def dict_fetchall(cursor: pg8000.Cursor) -> Optional[SqlResult]:
         for row in rows:
             result.append(dict(zip(cols, row)))
 
-    print("returning result: ", result)
+    print(f"returning results {len(result)}:")
     return result
 
 
@@ -573,7 +638,7 @@ def execute_and_fetch(fetcher: SqlFetcher, sql: str, params=(),
     try:
         cursor.execute(sql, params)
         sql_res = fetcher(cursor)
-        print(sql_res)
+        print(sql_res[:5])
 
         if commit:
             conn.commit()

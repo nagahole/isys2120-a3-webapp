@@ -80,17 +80,39 @@ def require_login(func):
 # == TICKETS ==================================================================
 
 
+def extract_ticket_sort():
+    sort_by = request.args.get("sort", "ticketid", type=str).lower()
+    sort_dir = request.args.get("direction", "asc", type=str).lower()
+    toggled = request.args.get("togglesort")
+
+    if toggled is None or \
+            toggled.lower() not in map(lambda x: x[0], TICKET_FORM_ATTRIBUTES):
+        return sort_by, sort_dir
+
+    toggled = toggled.lower()
+
+    if toggled == sort_by:
+        sort_dir = "desc" if sort_dir == "asc" else "asc"
+    else:
+        sort_by = toggled
+        sort_dir = "asc"
+
+    return sort_by, sort_dir
+
+
 @app.route("/tickets")
 @require_login
 def list_tickets():
     page_no = request.args.get("page", 1, type=int)
+    sort_by, sort_dir = extract_ticket_sort()
+
     total_tickets = database.tickets_count()
 
     if total_tickets is None:
         flash("Error accessing tickets information")
         return redirect(url_for("index"))
 
-    tickets_listdict = database.list_tickets(page_no)
+    tickets_listdict = database.list_tickets(page_no, sort_by, sort_dir)
 
     if tickets_listdict is None:  # error fetching tickets
         tickets_listdict = []
@@ -110,7 +132,7 @@ def list_tickets():
         tickets=tickets_listdict,
         pagination=pagination,
         route="list_tickets",
-        params={}
+        params={"sort": quote(sort_by), "direction": quote(sort_dir)}
     )
 
 
@@ -207,11 +229,8 @@ def search_tickets():
 @require_login
 def search_tickets_result():
 
-    page_no = request.args.get("page", 1, type=int)
+    # validate attribute
     attribute = request.args.get("attribute", "", type=str)
-    search = request.args.get("search", "", type=str)
-
-    print(f"search {attribute} by {search}. page {page_no}")
 
     try:
         parser = next(
@@ -220,6 +239,9 @@ def search_tickets_result():
     except StopIteration:  # attribute not in TICKET_FORM_ATTRIBUTES
         flash(f"Search field '{attribute}' doesn't exist")
         return redirect(url_for("search_tickets"))
+
+    # validate search
+    search = request.args.get("search", "", type=str)
 
     try:
         parsed_search = parser(search)
@@ -252,6 +274,8 @@ def search_tickets_result():
 
         return redirect(url_for("index"))
 
+    page_no = request.args.get("page", 1, type=int)
+
     pagination = Pagination(
         page_no,
         database.TICKETS_PER_PAGE,
@@ -270,17 +294,23 @@ def search_tickets_result():
 
     page_no = pagination.page
 
+    sort_by, sort_dir = extract_ticket_sort()
+    print(
+        f"search {attribute}: {search}, "
+        f"pg {page_no}, "
+        f"sorted by {sort_by} {sort_dir}"
+    )
+
     tickets_listdict = database.search_table_by_filter(
         "Tickets",
         attribute,
         search_filter,
         parsed_search,
         limit=database.TICKETS_PER_PAGE,
-        offset=(page_no - 1) * database.TICKETS_PER_PAGE
+        offset=(page_no - 1) * database.TICKETS_PER_PAGE,
+        sort_by=sort_by,
+        sort_dir=sort_dir
     )
-
-    print(count_listdict)
-    print(tickets_listdict)
 
     if tickets_listdict is None:
         flash(DATABASE_ERR_TEXT)
@@ -295,7 +325,12 @@ def search_tickets_result():
         tickets=tickets_listdict,
         pagination=pagination,
         route="search_tickets_result",
-        params={"attribute": quote(attribute), "search": quote(search)}
+        params={
+            "attribute": quote(attribute),
+            "search": quote(search),
+            "sort": quote(sort_by),
+            "direction": quote(sort_dir)
+        }
     )
 
 
@@ -614,8 +649,6 @@ def search_users():
         request.form["searchterm"]
     )
 
-    print(users_listdict)
-
     if users_listdict is None:
         flash(DATABASE_ERR_TEXT)
         return redirect(url_for("search_users"))
@@ -799,6 +832,30 @@ def add_user():
         return redirect(url_for("add_user"))
 
     return list_single_users(user_dict["userid"])
+
+# == OTHER ====================================================================
+
+
+@app.route("/jump_to", methods=["POST"])
+@require_login
+def jump_to():
+    route = request.args.get("route", "index", type=str)
+    params = request.args.to_dict()
+
+    if "route" in params:
+        del params["route"]
+
+    if "page" in params:
+        del params["page"]
+
+    page_str = request.form.get("page", "1")
+
+    try:
+        page_no = int(page_str)
+    except ValueError:
+        page_no = 1
+
+    return redirect(url_for(route, page=page_no, **params))
 
 
 # == INDEX ====================================================================

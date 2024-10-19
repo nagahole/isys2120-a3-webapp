@@ -37,7 +37,7 @@
 
                 <!-- Current Page -->
                 <div class="px-4 justify-content-center align-self-start" style="flex: 2.4;">
-                    <form action="">
+                    <form action="{{ url_for('jump_to', route=route, **params) }}" method="POST">
                         <input
                             name="page"
                             placeholder="Page no.."
@@ -87,14 +87,86 @@
                 {% if session.isadmin == True %}
                 <th>Delete</th>
                 {% endif %}
-                <th>TicketID</th>
-                <th>FlightID</th>
-                <th>PassengerID</th>
-                <th>TicketNumber</th>
-                <th>BookingDate</th>
-                <th>SeatNumber</th>
-                <th>Class</th>
-                <th>Price</th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='ticketid', **params) }}">
+                        TicketID
+                        {% if sort == 'ticketid' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='flightid', **params) }}">
+                        FlightID
+                        {% if sort == 'flightid' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='passengerid', **params) }}">
+                        PassengerID
+                        {% if sort == 'passengerid' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='ticketnumber', **params) }}">
+                        TicketNumber
+                        {% if sort == 'ticketnumber' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='bookingdate', **params) }}">
+                        BookingDate
+                        {% if sort == 'bookingdate' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='seatnumber', **params) }}">
+                        SeatNumber
+                        {% if sort == 'seatnumber' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='class', **params) }}">
+                        Class
+                        {% if sort == 'class' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="{{ url_for(route, togglesort='price', **params) }}">
+                        Price
+                        {% if sort == 'price' %}
+                            <i class="fa {% if direction == 'asc' %}fa-sort-up{% else %}fa-sort-down{% endif %}"></i>
+                        {% else %}
+                            <i class="fa fa-sort"></i>
+                        {% endif %}
+                    </a>
+                </th>
                 {% if session.isadmin == True %}
                 <th>Update</th>
                 {% endif %}
