@@ -11,7 +11,6 @@ from src.session import Session
 from src.filters import Filters
 from src.pagination import Pagination
 
-# TODO dropdown
 
 TICKET_FORM_ATTRIBUTES: tuple[tuple[str, callable], ...] = (
     ("ticketid", int),
@@ -906,7 +905,7 @@ def login():
     session.name = login_response[0]["firstname"]
     session.userid = login_response[0]["userid"]
     session.logged_in = True
-    session.isadmin = True  # TODO login_response[0]["isadmin"]
+    session.isadmin = login_response[0]["isadmin"]
     return redirect(url_for("index"))
 
 
