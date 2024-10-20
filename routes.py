@@ -169,7 +169,7 @@ def list_single_tickets(ticketid):
         tickets=tickets_listdict,
         pagination=pagination,
         route="list_single_tickets",
-        params={"ticketid": quote(str(ticketid))}
+        params={}
     )
 
 
