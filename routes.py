@@ -1,7 +1,7 @@
 import configparser
 from datetime import datetime
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from functools import wraps
 
 from flask import *
@@ -17,10 +17,7 @@ TICKET_FORM_ATTRIBUTES: tuple[tuple[str, callable], ...] = (
     ("flightid", int),
     ("passengerid", int),
     ("ticketnumber", str),
-    (
-        "bookingdate",
-        lambda s: datetime.strptime(s.strip(), "%Y-%m-%d %H:%M:%S")
-    ),
+    ("bookingdate", str),
     ("seatnumber", str),
     ("class", str),
     ("price", float)
@@ -203,15 +200,26 @@ def search_tickets():
     List all rows in tickets that match a particular name
     """
     if request.method == "GET":
+
+        classes = database.get_tickets_classes()
+
+        if classes is None:
+            flash("Something went wrong with the database")
+            return redirect(url_for("index"))
+
         return render_template(
             "tickets/search_tickets.html",
-            page=page, session=session
+            page=page,
+            session=session,
+            classes=classes
         )
 
     # else POST
 
     attribute = request.form["searchfield"].lower()
-    search = request.form["searchterm"]
+    search = request.form[
+        "searchterm_class" if attribute == "class" else "searchterm_text"
+    ].lower()
 
     return redirect(
         url_for(
@@ -228,7 +236,7 @@ def search_tickets():
 def search_tickets_result():
 
     # validate attribute
-    attribute = request.args.get("attribute", "", type=str)
+    attribute = unquote(request.args.get("attribute", "", type=str))
 
     try:
         parser = next(
@@ -239,7 +247,7 @@ def search_tickets_result():
         return redirect(url_for("search_tickets"))
 
     # validate search
-    search = request.args.get("search", "", type=str)
+    search = unquote(request.args.get("search", "", type=str))
 
     try:
         parsed_search = parser(search)
@@ -247,15 +255,20 @@ def search_tickets_result():
         flash(f"Search field in wrong form")
         return redirect(url_for("search_tickets"))
 
-    search_filter = Filters.LIKE if \
-        isinstance(parsed_search, str) else Filters.EQUALS
+    if isinstance(parsed_search, str) and attribute != "bookingdate":
+        search_filter = Filters.LIKE
+    else:
+        search_filter = Filters.EQUALS
+
+    no_lower = attribute == "bookingdate"
 
     count_listdict = database.select_from_table_by_filter(
         "Count(TicketID) AS count",
         "Tickets",
         attribute,
         search_filter,
-        parsed_search
+        parsed_search,
+        no_lower=no_lower
     )
 
     if count_listdict is None:

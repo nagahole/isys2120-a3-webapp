@@ -88,6 +88,15 @@ def tickets_count() -> Optional[int]:
     return response[0]["count"]
 
 
+def get_tickets_classes() -> Optional[list[str]]:
+    sql = """
+        SELECT DISTINCT Class
+            FROM Tickets
+    """
+
+    return execute_and_fetch(lambda c: [r[0] for r in c.fetchall()], sql)
+
+
 def list_tickets(page: int, sort_by: str,
                  sort_dir: str) -> Optional[SqlResult]:
     """
@@ -490,7 +499,8 @@ def search_table_by_filter(table: str,
                            limit: int = None,
                            offset: int = None,
                            sort_by: str = None,
-                           sort_dir: str = None) -> Optional[SqlResult]:
+                           sort_dir: str = None,
+                           no_lower: bool = False) -> Optional[SqlResult]:
 
     return select_from_table_by_filter(
         "*",
@@ -502,7 +512,8 @@ def search_table_by_filter(table: str,
         offset,
         sort_by,
         sort_dir,
-        complete_sort=True
+        complete_sort=True,
+        no_lower=no_lower
     )
 
 
@@ -516,7 +527,8 @@ def select_from_table_by_filter(
     offset: int = None,
     sort_by: str = None,
     sort_dir: str = None,
-    complete_sort: bool = True
+    complete_sort: bool = True,
+    no_lower: bool = False
 ) -> Optional[SqlResult]:
     """
     Search for a table with a custom filter
@@ -530,12 +542,17 @@ def select_from_table_by_filter(
         return None
 
     if isinstance(filter_val, str):
-        attr_val = f"lower({attribute})"
 
-        if filter_type == Filters.LIKE:
-            filter_val = f"%{filter_val.lower()}%"
+        if no_lower:
+            attr_val = attribute
         else:
+            attr_val = f"lower({attribute})"
+
             filter_val = filter_val.lower()
+
+            if filter_type == Filters.LIKE:
+                filter_val = f"%{filter_val}%"
+
     else:
         attr_val = attribute
 
@@ -583,7 +600,7 @@ def dict_fetchall(cursor: pg8000.Cursor) -> Optional[SqlResult]:
 
     result = []
 
-    cols = [a[0] for a in cursor.description]
+    cols = [a[0].lower() for a in cursor.description]
 
     rows = cursor.fetchall()
 
@@ -609,7 +626,7 @@ def dict_fetchone(cursor: pg8000.Cursor) -> SqlResult:
 
         print("cursor description", cursor.description)
 
-        cols = [a[0] for a in cursor.description]
+        cols = [a[0].lower() for a in cursor.description]
         sql_result = cursor.fetchone()
 
         print("sql_result: ", sql_result)

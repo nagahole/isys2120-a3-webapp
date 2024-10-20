@@ -16,7 +16,7 @@ if __name__ == '__main__':
     print(
         "If you are on Linux/Your Own Computer: Please open your browser to: "
         f"http://127.0.0.1:{portchoice}/"
-        )
+    )
 
     print("-"*70)
 

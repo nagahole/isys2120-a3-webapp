@@ -20,17 +20,52 @@
         <div class="invalid-feedback">Please select a search field</div>
     </div>
 
-    <div class="form-group">
-        <label>
-            Enter search term<br/>
-            <span class="small text-secondary">Enter datetime in format (24-hour time)<br/>YYYY-MM-DD HH:MM:SS</span>
-        </label>
-        <input class="form-control" type="text" name="searchterm" placeholder="Search Term" required>
+    <!-- Search term input field for text -->
+    <div class="form-group" id="text-search-group">
+        <label id="searchterm-label">Enter search term</label>
+        <input class="form-control" type="text" id="searchterm" name="searchterm_text" placeholder="Search Term" required>
     </div>
+
+    <!-- Dropdown for class options -->
+    <div id="class-dropdown" class="form-group d-none">
+        <label>Select class</label>
+        <select class="form-control" id="class-options" name="searchterm_class">
+            {% for class in classes %}
+            <option value="{{ class }}">{{ class }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
     <button class="btn btn-primary" type="submit">Search</button>
 </form>
 
 </div>
+
+<script>
+    document.getElementById('searchfield').addEventListener('change', function() {
+        const searchField = this.value;
+        const searchTermInput = document.getElementById('text-search-group');
+        const classDropdown = document.getElementById('class-dropdown');
+
+        if (searchField === 'class') {
+            searchTermInput.classList.add('d-none');
+            searchTermInput.querySelector('input').removeAttribute('required'); // Remove 'required' for text input
+            classDropdown.classList.remove('d-none');     // Show the dropdown
+            classDropdown.querySelector('select').setAttribute('required', true);
+        } else {
+            searchTermInput.classList.remove('d-none');
+            searchTermInput.querySelector('input').setAttribute('required', true); // Make text input required
+            classDropdown.classList.add('d-none');          // Hide the dropdown
+            classDropdown.querySelector('select').removeAttribute('required');
+
+            if (searchField === 'bookingdate') {
+                searchTermInput.querySelector('input').setAttribute('type', 'datetime-local');
+            } else {
+                searchTermInput.querySelector('input').setAttribute('type', 'text');
+            }
+        }
+    });
+</script>
 
 {% include 'end.html' %}
 
