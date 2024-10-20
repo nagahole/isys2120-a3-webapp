@@ -119,7 +119,7 @@ def list_tickets():
         total_tickets
     )
 
-    page["title"] = "List Contents of Tickets"
+    page["title"] = "Tickets"
     return render_template(
         "tickets/list_tickets.html",
         page=page,
@@ -161,7 +161,7 @@ def list_single_tickets(ticketid):
         0
     )
 
-    page["title"] = "List Single ticketid for tickets"
+    page["title"] = "Ticket"
     return render_template(
         "tickets/list_tickets.html",
         page=page,
@@ -293,19 +293,22 @@ def search_tickets_result():
         matching_tickets
     )
 
+    sort_by, sort_dir = extract_ticket_sort()
+
     if page_no != pagination.page:
         return redirect(
             url_for(
                 "search_tickets_result",
                 page=pagination.page,
-                attribute=quote(attribute),
-                search=quote(search)
+                attribute=attribute,
+                search=search,
+                sort=sort_by,
+                direction=sort_dir
             )
         )
 
     page_no = pagination.page
 
-    sort_by, sort_dir = extract_ticket_sort()
     print(
         f"search {attribute}: {search}, "
         f"pg {page_no}, "
@@ -327,7 +330,7 @@ def search_tickets_result():
         flash(DATABASE_ERR_TEXT)
         return redirect(url_for("index"))
 
-    page["title"] = f"Tickets search by {attribute}"
+    page["title"] = f"Tickets Search by {attribute}"
 
     return render_template(
         "tickets/list_tickets.html",
@@ -356,20 +359,35 @@ def delete_ticket(ticketid):
         flash("Only admins can delete tickets!")
         return redirect(url_for("index"))
 
+    route = request.args.get("route", "list_tickets", type=str)
+    page_no = request.args.get("page", 1, type=int)
+    sort_by, sort_dir = extract_ticket_sort()
+    attribute = request.args.get("attribute", "ticketid", type=str)
+    search = request.args.get("search", "1", type=str)
+
+    redirection = redirect(
+        url_for(
+            route,
+            page=page_no,
+            sort=sort_by,
+            direction=sort_dir,
+            attribute=attribute,
+            search=search
+        )
+    )
+
     try:
         ticketid = int(ticketid)
     except ValueError:
         flash("TicketID must be an integer")
-        return redirect(url_for("list_tickets"))
+        return redirection
 
     response = database.delete_ticket(ticketid)
 
     if response is None:
-        page["title"] = f"List tickets after user {ticketid} has been deleted"
-    else:
-        page["title"] = f"Error deleting {ticketid}. Is it a valid ticketID?"
+        flash(f"Error deleting {ticketid}")
 
-    return redirect(url_for("list_tickets"))
+    return redirection
 
 
 def extract_from_ticket_form(form, default_values: tuple) \
@@ -413,8 +431,6 @@ def update_ticket():
     if not session.isadmin:
         flash("Only admins can update ticket details!")
         return redirect(url_for("index"))
-
-    page["title"] = "Update ticket details"
 
     print("request form is:")
     print(request.form)
@@ -466,7 +482,7 @@ def edit_ticket(ticketid):
         flash("TicketID must be an integer")
         return redirect(url_for("list_tickets"))
 
-    page["title"] = "Edit ticket details"
+    page["title"] = "Edit Ticket"
 
     tickets_list_dict = database.search_table_by_filter(
         "Tickets", "ticketid", Filters.EQUALS, ticketid
@@ -497,7 +513,7 @@ def add_ticket():
         flash("Only admins can add tickets!")
         return redirect(url_for("index"))
 
-    page["title"] = "Add ticket details"
+    page["title"] = "Add Ticket"
 
     if request.method == "GET":
         return render_template("tickets/add_ticket.html",
@@ -567,7 +583,7 @@ def list_users():
         users_listdict = []
         flash("Error fetching users")
 
-    page["title"] = "List Contents of users"
+    page["title"] = "Users"
     return render_template(
         "users/list_users.html",
         page=page, session=session, users=users_listdict
@@ -591,7 +607,7 @@ def list_single_users(userid):
             f"'userid' for the value {userid}"
         )
 
-    page["title"] = "List Single userid for users"
+    page["title"] = "User"
     return render_template(
         "users/list_users.html",
         page=page, session=session, users=users_listdict
@@ -611,7 +627,7 @@ def list_consolidated_users():
         users_userroles_listdict = []
         flash("Error, there are no rows in users_userroles_listdict")
 
-    page["title"] = "List Contents of Users join Userroles"
+    page["title"] = "Consolidated Users"
 
     return render_template(
         "users/list_consolidated_users.html",
@@ -671,8 +687,6 @@ def search_users():
         )
         return redirect(url_for("search_users"))
 
-    page["title"] = "Users search"
-
     return render_template(
         "users/list_users.html",
         page=page, session=session, users=users_listdict
@@ -693,9 +707,7 @@ def delete_user(userid):
     response = database.delete_user(userid)
 
     if response is None:
-        page["title"] = f"List users after user {userid} has been deleted"
-    else:
-        page["title"] = f"Error deleting {userid}. Are they a valid user?"
+        flash(f"Error deleting {userid}")
 
     return redirect(url_for("list_consolidated_users"))
 
@@ -734,8 +746,6 @@ def update_user():
     if not session.isadmin:
         flash("Only admins can update user details!")
         return redirect(url_for("index"))
-
-    page["title"] = "Update user details"
 
     print("request form is:")
     print(request.form)
@@ -776,7 +786,7 @@ def edit_user(userid):
         flash("Only admins can update user details!")
         return redirect(url_for("index"))
 
-    page["title"] = "Edit user details"
+    page["title"] = "Edit User Details"
 
     users_list_dict = database.search_table_by_filter(
         "Users", "userid", Filters.EQUALS, userid
@@ -806,7 +816,7 @@ def add_user():
         flash("Only admins can add users!")
         return redirect(url_for("index"))
 
-    page["title"] = "Add user details"
+    page["title"] = "Add User Details"
 
     # Check your incoming parameters
     if request.method == "GET":

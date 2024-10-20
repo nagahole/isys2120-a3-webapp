@@ -193,7 +193,7 @@
             <tr class="align-items-center">
                 {% if session.isadmin == True %}
                     <td>
-                        <a href="{{ url_for('delete_ticket', ticketid=item.ticketid) }}" class="btn btn-danger">Delete</a>
+                        <a href="{{ url_for('delete_ticket', page=pagination.page, ticketid=item.ticketid, route=route, **params) }}" class="btn btn-danger">Delete</a>
                     </td>
                 {% endif %}
                     <td class="align-middle">{{item['ticketid']}}</td>
