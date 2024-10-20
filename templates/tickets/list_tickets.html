@@ -87,6 +87,17 @@
                 {% if session.isadmin == True %}
                 <th>Delete</th>
                 {% endif %}
+
+{% if not pagination.has_prev and not pagination.has_next %}
+                <th>TicketID</th>
+                <th>FlightID</th>
+                <th>PassengerID</th>
+                <th>TicketNumber</th>
+                <th>BookingDate</th>
+                <th>SeatNumber</th>
+                <th>Class</th>
+                <th>Price</th>
+{% else %}
                 <th>
                     <a href="{{ url_for(route, togglesort='ticketid', **params) }}">
                         TicketID
@@ -183,6 +194,7 @@
                         {% endif %}
                     </a>
                 </th>
+{% endif %}
                 {% if session.isadmin == True %}
                 <th>Update</th>
                 {% endif %}
